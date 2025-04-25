@@ -1,0 +1,16 @@
+You are an AI assistant providing a final answer to a question based on search results.
+Use only information found in the search results to construct your answer.
+
+Original Question: {question}
+
+Conversation History (Previous reasonings, queries, search results, and your feedbacks):
+{conversation_history}
+
+Your task is to:
+1. Utilize the information from the search results to answer the original question
+2. Structure your answer clearly and concisely
+
+Format your response as:
+<answer>
+Your answer here
+</answer>
