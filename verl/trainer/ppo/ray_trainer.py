@@ -40,7 +40,7 @@ from verl.trainer.ppo import core_algos
 from verl.utils.seqlen_balancing import get_seqlen_balanced_partitions, log_seqlen_unbalance
 
 import re
-from search_c1.llm_agent.generation_ import LLMGenerationManager, GenerationConfig
+from search_c1.llm_agent.generation import LLMGenerationManager, GenerationConfig
 
 WorkerType = Type[Worker]
 
@@ -486,6 +486,7 @@ class RayPPOTrainer(object):
             no_think_rl=self.config.algorithm.no_think_rl,
             search_url = self.config.retriever.url,
             topk = self.config.retriever.topk,
+            generator_llm = self.config.generator_llm,
         )
 
         # Agent config preparation
@@ -717,6 +718,7 @@ class RayPPOTrainer(object):
             no_think_rl=self.config.algorithm.no_think_rl,
             search_url = self.config.retriever.url,
             topk = self.config.retriever.topk,
+            generator_llm = self.config.generator_llm,
         )
 
         generation_manager = LLMGenerationManager(

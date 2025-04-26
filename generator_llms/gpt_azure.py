@@ -1,7 +1,7 @@
 import os
 from openai import OpenAI
 import pdb
-with open('./openai_api_azure.key', 'r') as f:
+with open('generator_llms/openai_api_azure.key', 'r') as f:
     api_key = f.read().strip()
     
     
@@ -65,14 +65,15 @@ def gpt_chat_4(prompt, query_dict):
     return chain.invoke(query_dict)
 
 
-def gpt_chat_4omini(prompt):
+def gpt_chat_4omini(prompt, max_tokens=None):
     message = HumanMessage(
         content=prompt
     )
     
     model = AzureChatOpenAI(
         deployment_name="gpt-4o-mini", # "gpt-35"
-        model_name='gpt-4o-mini'
+        model_name='gpt-4o-mini',
+        max_tokens=max_tokens
     )
     response = model.invoke([message]).content
     

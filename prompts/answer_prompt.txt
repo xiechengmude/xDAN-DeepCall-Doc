@@ -1,16 +1,13 @@
-You are an AI assistant providing a final answer to a question based on search results.
-Use only information found in the search results to construct your answer.
+You are an AI assistant providing a final answer to a question.
 
-Original Question: {question}
+Question: {question}
 
+Here're the iterative search results that may help you answer the question. Use it on demand.
+------
 Conversation History (Previous reasonings, queries, search results, and your feedbacks):
 {conversation_history}
+------
 
-Your task is to:
-1. Utilize the information from the search results to answer the original question
-2. Structure your answer clearly and concisely
-
-Format your response as:
-<answer>
-Your answer here
-</answer>
+If you feel the above information unhelpful, just use your own knowledge to answer the Question: {question}.
+Please directly answer the Question with no more than 5 words. Do not include anything else in your response. 
+Now, answer:

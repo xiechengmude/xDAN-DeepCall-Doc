@@ -2,10 +2,10 @@ import json
 import boto3
 import time
 
-with open('./aws_access.key', 'r') as f:
+with open('generator_llms/aws_access.key', 'r') as f:
     AWS_ACCESS_KEY_ID = f.read().strip()
 
-with open('./claude_api_aws.key', 'r') as f:
+with open('generator_llms/claude_api_aws.key', 'r') as f:
     AWS_SECRET_ACCESS_KEY = f.read().strip()
 
 AWS_DEFAULT_REGION = "us-west-2"
@@ -27,7 +27,7 @@ BEDROCK_MODEL_NAME_MAP = {
 }
 
 
-def get_claude_response(prompt, max_tokens=2048, temperature=0, tools=None, tool_choice=None, llm="sonnet"):
+def get_claude_response(prompt, max_tokens=800, temperature=0, tools=None, tool_choice=None, llm="sonnet"):
     model = BEDROCK_MODEL_NAME_MAP.get(llm)
     if model is None:
         raise ValueError(f"Unknown LLM: {llm}")

@@ -86,6 +86,16 @@ def em_check(prediction, golden_answers):
             break
     return score
 
+def answer_span_check(prediction, golden_answers):
+    if isinstance(golden_answers, str):
+        golden_answers = [golden_answers]
+    normalized_prediction = normalize_answer(prediction)
+    score = 0
+    normalized_golden_answers = [normalize_answer(golden_answer) for golden_answer in golden_answers]
+    if has_answers(normalized_prediction, normalized_golden_answers, _tokenizer, regex=False):
+        score = 1
+    return score
+
 def subem_check(prediction, golden_answers):
     if isinstance(golden_answers, str):
         golden_answers = [golden_answers]
@@ -110,9 +120,9 @@ def extract_titles(text):
     
     return titles
 
-def extract_texts(text):
+def extract_texts(solution_str):
     # Find all sections between <information> and </information>
-    info_sections = re.findall(r'<information>(.*?)</information>', text, re.DOTALL)
+    info_sections = re.findall(r'<information>(.*?)</information>', solution_str, re.DOTALL)
 
     texts = []
     for section in info_sections:
@@ -190,7 +200,8 @@ def compute_score_rag(solution_str, ground_truth, method='strict', format_score=
     if answer is None:
         return 0
     else:
-        if em_check(answer, ground_truth['target']):
+        # if em_check(answer, ground_truth['target'])
+        if answer_span_check(answer, ground_truth['target']):
             return answer_score + retrieval_score
         else:
             return format_score

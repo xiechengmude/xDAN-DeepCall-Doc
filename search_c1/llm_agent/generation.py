@@ -300,7 +300,7 @@ class LLMGenerationManager:
 
             # Process outputs 
             meta_info = gen_output.meta_info            
-            responses_ids, responses_str = self._postprocess_responses(gen_output.batch['responses'])
+            responses_ids, responses_str, queries = self._postprocess_responses(gen_output.batch['responses'])
             responses_ids, responses_str = self.tensor_fn._example_level_pad(responses_ids, responses_str, active_mask)
             
             # Execute search and get feedback from the environment
@@ -345,11 +345,11 @@ class LLMGenerationManager:
 
             # Process outputs - keeping exact compatibility with Search-R1
             meta_info = gen_output.meta_info            
-            responses_ids, responses_str = self._postprocess_responses(gen_output.batch['responses'])
+            responses_ids, responses_str, queries = self._postprocess_responses(gen_output.batch['responses'])
             responses_ids, responses_str = self.tensor_fn._example_level_pad(responses_ids, responses_str, active_mask)
             
             # Execute final predictions (without doing search)
-            _, dones, valid_action, is_search = self.execute_predictions(
+            next_obs, dones, valid_action, is_search = self.execute_predictions(
                 responses_str, self.tokenizer.pad_token, active_mask, do_search=False
             )
 
@@ -359,20 +359,21 @@ class LLMGenerationManager:
             active_num_list.append(active_mask.sum().item())
             valid_action_stats += torch.tensor(valid_action, dtype=torch.int)
             valid_search_stats += torch.tensor(is_search, dtype=torch.int)
+            
+            next_obs_ids = self._process_next_obs(next_obs)
 
             # Update right side
             original_right_side = self._update_right_side(
                 original_right_side,
                 responses_ids,
+                next_obs_ids
             )
         
         # Store metadata for reward computation
-        meta_info = {
-            'turns_stats': turns_stats.tolist(),
-            'active_mask': active_mask.tolist(),
-            'valid_action_stats': valid_action_stats.tolist(),
-            'valid_search_stats': valid_search_stats.tolist()
-        }
+        meta_info['turns_stats'] = turns_stats.tolist()
+        meta_info['active_mask'] = active_mask.tolist()
+        meta_info['valid_action_stats'] = valid_action_stats.tolist()
+        meta_info['valid_search_stats'] = valid_search_stats.tolist()
         
         print("ACTIVE_TRAJ_NUM:", active_num_list)
         
@@ -446,7 +447,7 @@ class LLMGenerationManager:
                 valid_action.append(0)
                 is_search.append(0)
             else:
-                if action == 'answer':
+                if action == 'answer' or not do_search:
                     final_answer = self._generate_final_answer(
                         self.original_questions[i], 
                         self.conversation_histories[i]
@@ -607,12 +608,10 @@ class LLMGenerationManager:
         
         Args:
             original_question: The original question
-            final_query: The final search query
-            search_result: The search results from the final query
             conversation_history: The conversation history between search copilot and generator LLM
             
         Returns:
-            Generated answer
+            Extracted answer string (inside <answer> tags)
         """
         # Format the prompt with the actual values
         prompt = self.answer_prompt.format(
@@ -620,22 +619,31 @@ class LLMGenerationManager:
             conversation_history=conversation_history
         )
         
+        max_length = 10
+        
         # Call the appropriate external LLM based on configuration
         if self.config.generator_llm == "claude-3.5":
-            answer = self.get_claude_response(prompt, llm='sonnet')
+            answer = self.get_claude_response(prompt, llm='sonnet', max_tokens=max_length)
         elif self.config.generator_llm == "claude-3":
-            answer = self.get_claude_response(prompt, llm='haiku')
+            answer = self.get_claude_response(prompt, llm='haiku', max_tokens=max_length)
         elif self.config.generator_llm == "gpt-3.5":
-            answer = self.gpt_chat_35_msg(prompt)
+            answer = self.gpt_chat_35_msg(prompt, max_tokens=max_length)
         elif self.config.generator_llm == "gpt-4o-mini":
-            answer = self.gpt_chat_4omini(prompt)
+            answer = self.gpt_chat_4omini(prompt, max_tokens=max_length)
         elif self.config.generator_llm == "gpt-4o":
-            answer = self.gpt_chat_4o(prompt)
+            answer = self.gpt_chat_4o(prompt, max_tokens=max_length)
         else:
-            # Default to simple answer if no valid LLM is specified
             raise ValueError(f"Invalid generator LLM: {self.config.generator_llm}")
-            
-        return answer
+
+        # Extract content between <answer> and </answer> tags
+        # match = re.search(r"<answer>(.*?)</answer>", answer, re.DOTALL)
+        # if match:
+        #     final_answer = match.group(1).strip()
+        # else:
+        #     print("No valid <answer>...</answer> tags found in the LLM response, use the whole response as the answer.")
+        final_answer = answer.strip()
+        
+        return final_answer
         
     def postprocess_predictions(self, predictions: List[Any]) -> Tuple[List[str], List[str]]:
         """
@@ -652,17 +660,30 @@ class LLMGenerationManager:
                 
                 if query_match:
                     query_text = query_match.group(1).strip()
-                    query = re.search(r'Query:\s*(.*?)(?=End:|$)', query_text, re.DOTALL)
                     
-                    if query:
-                        content = query.group(1).strip()
-                        action = "search"  # Always a search action for queries
-                    else:
+                    # Check if the query is in JSON format
+                    try:
+                        # Try to parse as JSON
+                        import json
+                        json_data = json.loads(query_text)
+                        if 'query' in json_data:
+                            content = json_data['query']
+                            if type(content) == list:
+                                content = content[0]
+                            elif type(content) == str:
+                                content = content
+                            else:
+                                content = ''
+                                
+                            action = "search"
+                        else:
+                            content = ''
+                            action = None
+                    except json.JSONDecodeError:
+                        # Fallback to regex pattern for non-JSON format
                         content = ''
                         action = None
-                elif answer_match:
-                    content = answer_match.group(1).strip()
-                    action = "answer"
+                        
                 else:
                     content = ''
                     action = None
@@ -715,7 +736,11 @@ class LLMGenerationManager:
         Returns:
             search results which is concatenated into a string
         """
-        results = self._batch_search(queries)['result']
+        try:
+            results = self._batch_search(queries)['result']
+        except Exception as e:
+            raise Exception(f"Error in batch_search: {e}, queries: {queries}")
+            
         
         return [self._passages2string(result) for result in results]
 
