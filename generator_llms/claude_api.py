@@ -27,7 +27,7 @@ BEDROCK_MODEL_NAME_MAP = {
 }
 
 
-def get_claude_response(prompt, max_tokens=800, temperature=0, tools=None, tool_choice=None, llm="sonnet"):
+def get_claude_response(prompt, max_tokens=500, temperature=0, tools=None, tool_choice=None, llm="sonnet"):
     model = BEDROCK_MODEL_NAME_MAP.get(llm)
     if model is None:
         raise ValueError(f"Unknown LLM: {llm}")

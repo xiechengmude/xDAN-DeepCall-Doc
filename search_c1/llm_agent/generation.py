@@ -6,6 +6,7 @@ from typing import List, Dict, Any, Tuple, Optional, Union
 from dataclasses import dataclass
 from verl import DataProto
 import requests
+import json
 
 @dataclass
 class GenerationConfig:
@@ -21,6 +22,8 @@ class GenerationConfig:
     include_information: bool = False  # Whether to include search results in feedback
     feedback_prompt_file: str = "prompts/feedback_prompt.txt"  # Path to feedback prompt template
     answer_prompt_file: str = "prompts/answer_prompt.txt"  # Path to answer prompt template
+    zero_shot_prompt_file: str = "prompts/zero_shot_prompt.txt"  # Path to zero-shot prompt template
+    zero_shot_store_file: str = "data/nq_hotpotqa_zeroshot_claude3/zeroshot_answers.json"
     generator_llm: str = "claude-3.5"  # Which LLM to use for generation ("claude-3.5", "claude-3   ", "gpt-3.5", "gpt-4o-mini", "gpt-4o")
 
 class LLMGenerationManager:
@@ -47,7 +50,9 @@ class LLMGenerationManager:
         # Load prompt templates for the generator LLM
         self.feedback_prompt = self._load_prompt(config.feedback_prompt_file)
         self.answer_prompt = self._load_prompt(config.answer_prompt_file)
-        
+        self.zero_shot_prompt = self._load_prompt(config.zero_shot_prompt_file)
+        self.zeroshot_answers = self._load_zeroshot_answers(config.zero_shot_store_file)
+        self.save_zeroshot_flag = False
         # Initialize tensor helper for handling tensors
         from .tensor_helper import TensorHelper, TensorConfig
         self.tensor_fn = TensorHelper(TensorConfig(
@@ -67,7 +72,22 @@ class LLMGenerationManager:
         except ImportError:
             print("Warning: generator_llms module not found. Using mock LLM responses.")
             raise ImportError("generator_llms module not found.")
-    
+
+    def _load_zeroshot_answers(self, filename):
+        """Load zeroshot answers from file."""
+        try:
+            with open(filename, 'r') as file:
+                return json.load(file)
+        except (FileNotFoundError, IOError):
+            print(f"Zeroshot answers file {filename} not found.")
+            return {}
+        
+    def _save_zeroshot_answers(self, filename):
+        """Save zeroshot answers to file."""
+        if self.save_zeroshot_flag:
+            with open(filename, 'w') as file:
+                json.dump(self.zeroshot_answers, file, indent=2)
+
     def _load_prompt(self, filename):
         """Load prompt template from file."""
         try:
@@ -278,9 +298,24 @@ class LLMGenerationManager:
         active_num_list = [active_mask.sum().item()]
         rollings = gen_batch
         
-        # Reset conversation histories and original questions for this batch
+        # Reset conversation histories for this batch
         self.conversation_histories = [""] * len(active_mask)
+        
+        # Extract the original questions from the initial inputs
         self.original_questions = [""] * len(active_mask)
+        initial_inputs_str = self.tokenizer.batch_decode(
+            initial_input_ids, 
+            skip_special_tokens=True
+        )
+        
+        # Extract questions from the initial inputs
+        for i, input_text in enumerate(initial_inputs_str):
+            question_matches = re.findall(r'<question>(.*?)</question>', input_text, re.DOTALL)
+            if question_matches:
+                # Use the last match of <question>...</question>
+                self.original_questions[i] = question_matches[-1].strip()
+            else:
+                print(f"No <question>...</question> tags found in the initial input {input_text}")
 
         # Main generation loop
         for step in range(self.config.max_turns):
@@ -423,14 +458,14 @@ class LLMGenerationManager:
         # Track conversation history for each active example
         if not hasattr(self, 'conversation_histories'):
             self.conversation_histories = [""] * len(active_mask)
-            self.original_questions = [""] * len(active_mask)
+            # self.original_questions = [""] * len(active_mask)
             
-        # Get original questions if not already set
-        if all(not q for q in self.original_questions):
-            for i, active in enumerate(active_mask):
-                if active:
-                    # Extract original question from the batch
-                    self.original_questions[i] = self._extract_original_question(predictions[i])
+        # # Get original questions if not already set
+        # if all(not q for q in self.original_questions):
+        #     for i, active in enumerate(active_mask):
+        #         if active:
+        #             # Extract original question from the batch
+        #             self.original_questions[i] = self._extract_original_question(predictions[i])
         
         search_queries = [content for action, content in zip(cur_actions, contents) if action == 'search']
         if do_search and search_queries:
@@ -441,14 +476,29 @@ class LLMGenerationManager:
             search_counter = 0
 
         for i, (action, active) in enumerate(zip(cur_actions, active_mask)):
-            if not active:
+            if not active and do_search:
                 next_obs.append('')
                 dones.append(True)
                 valid_action.append(0)
                 is_search.append(0)
+            elif not active and not do_search:
+                final_answer, zero_shot_answer = self._generate_final_answer(
+                    self.original_questions[i], 
+                    self.conversation_histories[i]
+                )
+                
+                # Store in conversation history
+                self.conversation_histories[i] += f"\nFinal answer: {final_answer}\n"
+                
+                # CHANGE: Include the answer in the observation
+                next_obs.append(f'\n\n<answer>{final_answer}</answer>\n\n<zeroshot_answer>{zero_shot_answer}</zeroshot_answer>\n\n')
+                
+                dones.append(True)
+                valid_action.append(1)
+                is_search.append(0)
             else:
                 if action == 'answer' or not do_search:
-                    final_answer = self._generate_final_answer(
+                    final_answer, zero_shot_answer = self._generate_final_answer(
                         self.original_questions[i], 
                         self.conversation_histories[i]
                     )
@@ -457,8 +507,7 @@ class LLMGenerationManager:
                     self.conversation_histories[i] += f"\nFinal answer: {final_answer}\n"
                     
                     # CHANGE: Include the answer in the observation
-                    next_obs.append(f'\n\n<answer>{final_answer}</answer>\n\n')
-                    
+                    next_obs.append(f'\n\n<answer>{final_answer}</answer>\n\n<zeroshot_answer>{zero_shot_answer}</zeroshot_answer>\n\n')
                     dones.append(True)
                     valid_action.append(1)
                     is_search.append(0)
@@ -505,20 +554,20 @@ class LLMGenerationManager:
             
         return next_obs, dones, valid_action, is_search
     
-    def _extract_original_question(self, text: str) -> str:
-        """Extract the original question from the input text."""
-        # Look for a question pattern, e.g., "Q: What is..." or just the first sentence
-        question_match = re.search(r'Q:\s*(.*?)(?=\n|$)', text, re.DOTALL)
-        if question_match:
-            return question_match.group(1).strip()
+    # def _extract_original_question(self, text: str) -> str:
+    #     """Extract the original question from the input text."""
+    #     # Look for a question pattern, e.g., "Q: What is..." or just the first sentence
+    #     question_match = re.search(r'Q:\s*(.*?)(?=\n|$)', text, re.DOTALL)
+    #     if question_match:
+    #         return question_match.group(1).strip()
         
-        # If no explicit question format, take the first sentence
-        sentences = re.split(r'(?<=[.!?])\s+', text)
-        if sentences:
-            return sentences[0].strip()
+    #     # If no explicit question format, take the first sentence
+    #     sentences = re.split(r'(?<=[.!?])\s+', text)
+    #     if sentences:
+    #         return sentences[0].strip()
             
-        # Fallback
-        return text.strip()
+    #     # Fallback
+    #     return text.strip()
     
     def _generate_feedback(self, original_question: str, query: str, search_result: str, conversation_history: str = "") -> str:
         """
@@ -611,7 +660,7 @@ class LLMGenerationManager:
             conversation_history: The conversation history between search copilot and generator LLM
             
         Returns:
-            Extracted answer string (inside <answer> tags)
+            answer string
         """
         # Format the prompt with the actual values
         prompt = self.answer_prompt.format(
@@ -619,19 +668,31 @@ class LLMGenerationManager:
             conversation_history=conversation_history
         )
         
-        max_length = 10
+        prompt_zero_shot = self.zero_shot_prompt.format(
+            question=original_question,
+        )
+        
+        max_length = 30
+        
+        if original_question not in self.zeroshot_answers:
+            self.save_zeroshot_flag = True
         
         # Call the appropriate external LLM based on configuration
         if self.config.generator_llm == "claude-3.5":
             answer = self.get_claude_response(prompt, llm='sonnet', max_tokens=max_length)
+            answer_zero_shot = self.get_claude_response(prompt_zero_shot, llm='sonnet', max_tokens=max_length) if original_question not in self.zeroshot_answers else self.zeroshot_answers[original_question]
         elif self.config.generator_llm == "claude-3":
             answer = self.get_claude_response(prompt, llm='haiku', max_tokens=max_length)
+            answer_zero_shot = self.get_claude_response(prompt_zero_shot, llm='haiku', max_tokens=max_length) if original_question not in self.zeroshot_answers else self.zeroshot_answers[original_question]
         elif self.config.generator_llm == "gpt-3.5":
             answer = self.gpt_chat_35_msg(prompt, max_tokens=max_length)
+            answer_zero_shot = self.gpt_chat_35_msg(prompt_zero_shot, max_tokens=max_length) if original_question not in self.zeroshot_answers else self.zeroshot_answers[original_question]
         elif self.config.generator_llm == "gpt-4o-mini":
             answer = self.gpt_chat_4omini(prompt, max_tokens=max_length)
+            answer_zero_shot = self.gpt_chat_4omini(prompt_zero_shot, max_tokens=max_length) if original_question not in self.zeroshot_answers else self.zeroshot_answers[original_question]
         elif self.config.generator_llm == "gpt-4o":
             answer = self.gpt_chat_4o(prompt, max_tokens=max_length)
+            answer_zero_shot = self.gpt_chat_4o(prompt_zero_shot, max_tokens=max_length) if original_question not in self.zeroshot_answers else self.zeroshot_answers[original_question]
         else:
             raise ValueError(f"Invalid generator LLM: {self.config.generator_llm}")
 
@@ -642,8 +703,10 @@ class LLMGenerationManager:
         # else:
         #     print("No valid <answer>...</answer> tags found in the LLM response, use the whole response as the answer.")
         final_answer = answer.strip()
+        final_answer_zero_shot = answer_zero_shot.strip()
+        self.zeroshot_answers[original_question] = final_answer_zero_shot
         
-        return final_answer
+        return final_answer, final_answer_zero_shot
         
     def postprocess_predictions(self, predictions: List[Any]) -> Tuple[List[str], List[str]]:
         """

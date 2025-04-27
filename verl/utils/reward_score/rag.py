@@ -136,18 +136,21 @@ def extract_answer(solution_str):
     answer_pattern = r'<answer>(.*?)</answer>'
     match = re.finditer(answer_pattern, solution_str, re.DOTALL)
     matches = list(match)
-    
-    # If there are 0 or exactly 1 matches, return None
-    if len(matches) <= 1:
+    # If there are 0 match, return None
+    if len(matches) < 1:
         return None
-    
-    # If there are 2 or more matches, return the last one
+    # If there are 1 or more matches, return the last one
     return matches[-1].group(1).strip()
 
+def extract_zeroshot_answer(solution_str):
+    answer_pattern = r'<zeroshot_answer>(.*?)</zeroshot_answer>'
+    match = re.finditer(answer_pattern, solution_str, re.DOTALL)
+    matches = list(match)
+    return matches[-1].group(1).strip() if len(matches) > 0 else None
 
-def compute_score_rag(solution_str, ground_truth, method='strict', format_score=0., answer_score=1.):
-    """The scoring function for exact match (EM).
 
+def compute_score_rag(solution_str, ground_truth, format_score=0.):
+    """
     Args:
         solution_str: the solution text
         ground_truth: the ground truth
@@ -155,11 +158,21 @@ def compute_score_rag(solution_str, ground_truth, method='strict', format_score=
         format_score: the score for the format
         score: the score for the correct answer
     """
+    retrieval_score = 0
+    answer_score = 0
+    zeroshot_answer_score = 0
+    
     retrieval_check = "recall" if ground_truth["gt_docs"] != [] else "span"
     
-    
     answer = extract_answer(solution_str=solution_str)
-    retrieval_score = 0
+    zeroshot_answer = extract_zeroshot_answer(solution_str=solution_str)
+    
+    if answer is not None:
+        answer_score = 2 if answer_span_check(answer, ground_truth['target']) else 0
+    
+    if zeroshot_answer is not None:
+        zeroshot_answer_score = 1 if answer_span_check(zeroshot_answer, ground_truth['target']) else 0
+    
     label = ground_truth['target'].tolist()
     
     if retrieval_check == "recall":
@@ -186,22 +199,29 @@ def compute_score_rag(solution_str, ground_truth, method='strict', format_score=
                 retrieval_score = 1
                 break
         
-    
-    
-    do_print = random.randint(1, 64) == 1
+    do_print = random.randint(1, 16) == 1
         
     if do_print:
         print(f"--------------------------------")
         print(f"Golden answers: {ground_truth['target']}")
         print(f"Extracted answer: {answer}")
+        print(f"Extracted zeroshot answer: {zeroshot_answer}")
         print(f"Extracted doc_info: {doc_info}")
         print(f"Solution string: {solution_str}")
     
-    if answer is None:
-        return 0
-    else:
-        # if em_check(answer, ground_truth['target'])
-        if answer_span_check(answer, ground_truth['target']):
-            return answer_score + retrieval_score
-        else:
-            return format_score
+    
+    # if both answer and zeroshot answer are correct, the correctness is not coming from retrieval, but it is good, thus we return weak combined score
+    if answer_score > 0 and zeroshot_answer_score > 0:
+        return retrieval_score + answer_score / 2
+    
+    # if answer is correct but zeroshot answer is incorrect, the correctness is coming from retrieval, thus we return combined score
+    if answer_score > 0 and zeroshot_answer_score == 0:
+        return retrieval_score + answer_score
+    
+    # if answer is incorrect but zeroshot answer is correct, the wrongness is coming from retrieval, thus we return negative score
+    if answer_score == 0 and zeroshot_answer_score > 0:
+        return -1
+    
+    # if both are incorrect, we return 0, we don't know how retrieval contributes to the wrongness, thus we return retrieval score
+    if answer_score == 0 and zeroshot_answer_score == 0:
+        return retrieval_score
