@@ -10,13 +10,8 @@ Search Results:
 Conversation History (Previous queries, search results, and feedback):
 {conversation_history}
 
-I. If you believe the question ({query}) cannot be answered by your knowledge and the search result, provide specific feedback on:
-    1. How well the current query retrieved relevant information
-    2. What important information might be missing
-    3. Concrete suggestions for improving the query
-IMPORTANT: At the end of your feedback, explicitly indicate if we should continue searching or not:
-    - If more information is needed, end with: "Stop Search: No"
+If you believe the question ({query}) cannot be answered by your knowledge and the search result, respond with "Stop Search: No"
 
-II. Otherwise (the search results and/or your knowledge is enough to answer the question), provide feedback as "Stop Search: Yes" without anyother information.
+Otherwise, if the search results and/or your knowledge is enough to answer the question, respond with "Stop Search: Yes"
 
-Keep your feedback CONCISE (within 500 tokens) and actionable. Now, provide your feedback:
+Only respond with "Stop Search: No" or "Stop Search: Yes" without any other information. Now, respond:

@@ -40,7 +40,9 @@ from verl.trainer.ppo import core_algos
 from verl.utils.seqlen_balancing import get_seqlen_balanced_partitions, log_seqlen_unbalance
 
 import re
-from search_c1.llm_agent.generation import LLMGenerationManager, GenerationConfig
+# from search_c1.llm_agent.generation import LLMGenerationManager, GenerationConfig
+from search_c1.llm_agent.generation_self import LLMGenerationManager, GenerationConfig
+
 
 WorkerType = Type[Worker]
 

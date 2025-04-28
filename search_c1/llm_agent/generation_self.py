@@ -106,7 +106,7 @@ class LLMGenerationManager:
             padding="longest"
         )['input_ids']
 
-    def _postprocess_responses(self, responses: torch.Tensor) -> Tuple[torch.Tensor, List[str], List[str]]:
+    def _postprocess_responses(self, responses: torch.Tensor) -> Tuple[torch.Tensor, List[str], List[str], List[bool]]:
         """Process responses to extract search queries."""
         responses_str = self.tokenizer.batch_decode(
             responses, 
@@ -115,28 +115,43 @@ class LLMGenerationManager:
 
         # Ensure responses end with </query> tag if it exists
         responses_str = [resp.split('</query>')[0] + '</query>'
-                if '</query>' in resp 
-                else resp
-                for resp in responses_str]
+                 if '</query>' in resp 
+                 else resp
+                 for resp in responses_str]
 
         # Extract query information
         queries = []
+        search_complete_flags = []
+        
         for resp in responses_str:
             query_match = re.search(r'<query>(.*?)</query>', resp, re.DOTALL)
+            search_complete_match = re.search(r'<search_complete>(.*?)</search_complete>', resp, re.DOTALL)
+            
+            # Check for search completion flag
+            search_complete = False
+            if search_complete_match:
+                complete_text = search_complete_match.group(1).strip().lower()
+                search_complete = complete_text == "true" or complete_text == "yes" or complete_text == "1" or complete_text == "y"
+            
+            # Extract query if present
             if query_match:
                 query_text = query_match.group(1).strip()
-                # Extract Query without End flag
-                query = re.search(r'Query:\s*(.*?)(?=End:|$)', query_text, re.DOTALL)
-                
-                if query:
-                    queries.append(query.group(1).strip())
-                else:
+                try:
+                    import json
+                    json_data = json.loads(query_text)
+                    if 'query' in json_data:
+                        queries.append(json_data['query'])
+                    else:
+                        queries.append("")
+                except:
                     queries.append("")
             else:
                 queries.append("")
+                
+            search_complete_flags.append(search_complete)
                     
         responses = self._batch_tokenize(responses_str)
-        return responses, responses_str, queries
+        return responses, responses_str, queries, search_complete_flags
 
     def _process_next_obs(self, next_obs: List[str]) -> torch.Tensor:
         """Process next observations from environment."""
@@ -335,7 +350,7 @@ class LLMGenerationManager:
 
             # Process outputs 
             meta_info = gen_output.meta_info            
-            responses_ids, responses_str, queries = self._postprocess_responses(gen_output.batch['responses'])
+            responses_ids, responses_str, queries, search_complete_flags = self._postprocess_responses(gen_output.batch['responses'])
             responses_ids, responses_str = self.tensor_fn._example_level_pad(responses_ids, responses_str, active_mask)
             
             # Execute search and get feedback from the environment
@@ -380,7 +395,7 @@ class LLMGenerationManager:
 
             # Process outputs - keeping exact compatibility with Search-R1
             meta_info = gen_output.meta_info            
-            responses_ids, responses_str, queries = self._postprocess_responses(gen_output.batch['responses'])
+            responses_ids, responses_str, queries, search_complete_flags = self._postprocess_responses(gen_output.batch['responses'])
             responses_ids, responses_str = self.tensor_fn._example_level_pad(responses_ids, responses_str, active_mask)
             
             # Execute final predictions (without doing search)
@@ -452,30 +467,24 @@ class LLMGenerationManager:
         """
         Execute predictions and generate external LLM feedback for Search-C1.
         """
-        cur_actions, contents = self.postprocess_predictions(predictions)
+        cur_actions, contents, search_complete_flags = self.postprocess_predictions(predictions)
         next_obs, dones, valid_action, is_search = [], [], [], []
         
         # Track conversation history for each active example
         if not hasattr(self, 'conversation_histories'):
             self.conversation_histories = [""] * len(active_mask)
-            # self.original_questions = [""] * len(active_mask)
             
-        # # Get original questions if not already set
-        # if all(not q for q in self.original_questions):
-        #     for i, active in enumerate(active_mask):
-        #         if active:
-        #             # Extract original question from the batch
-        #             self.original_questions[i] = self._extract_original_question(predictions[i])
         
         search_queries = [content for action, content in zip(cur_actions, contents) if action == 'search']
         if do_search and search_queries:
             search_results = self.batch_search(search_queries)
-            search_counter = 0
+            assert len(search_results) == sum([1 for action in cur_actions if action == 'search'])
         else:
-            search_results = [''] * len(search_queries)
-            search_counter = 0
+            print("No search queries or no search is allowed")
+            search_results = [''] * sum([1 for action in cur_actions if action == 'search'])
 
-        for i, (action, active) in enumerate(zip(cur_actions, active_mask)):
+        for i, (action, search_complete, active) in enumerate(zip(cur_actions, search_complete_flags, active_mask)):
+            print(i, action, search_complete, active)
             if not active and do_search:
                 next_obs.append('')
                 dones.append(True)
@@ -497,61 +506,60 @@ class LLMGenerationManager:
                 valid_action.append(1)
                 is_search.append(0)
             else:
-                if action == 'answer' or not do_search:
+                if action == 'search_complete' or not do_search:
+                    # Generate final answer using the external LLM
                     final_answer, zero_shot_answer = self._generate_final_answer(
                         self.original_questions[i], 
                         self.conversation_histories[i]
                     )
                     
                     # Store in conversation history
-                    self.conversation_histories[i] += f"\nFinal answer: {final_answer}\n"
+                    self.conversation_histories[i] += f"\nSearch complete. Final answer: {final_answer}\n"
                     
-                    # CHANGE: Include the answer in the observation
+                    # Include the answer in the observation
                     next_obs.append(f'\n\n<answer>{final_answer}</answer>\n\n<zeroshot_answer>{zero_shot_answer}</zeroshot_answer>\n\n')
                     dones.append(True)
                     valid_action.append(1)
                     is_search.append(0)
                     
                 elif action == 'search':
-                    # Execute search and provide feedback
+                    # Execute search
+                    # Execute search
                     if do_search:
-                        search_result = search_results[search_counter]
-                        search_counter += 1
+                        search_result = search_results.pop(0).strip()
+
+                        self.conversation_histories[i] += f"\nQuery: {contents[i]}\nSearch results: {search_result}"
                         
-                        # Generate feedback using the external LLM
-                        feedback = self._generate_feedback(
-                            original_question=self.original_questions[i],
-                            query=contents[i], 
-                            search_result=search_result,
-                            conversation_history=self.conversation_histories[i]
+                        # Always include information tags
+                        next_obs.append(f'\n\n<information>{search_result}</information>\n\n')
+                        
+                        dones.append(False)  # Always continue here, let the copilot decide in the next turn
+                        valid_action.append(1)
+                        is_search.append(1)
+
+                    else:
+                        # This should generate a final answer when max iterations is reached
+                        final_answer, zero_shot_answer = self._generate_final_answer(
+                            self.original_questions[i], 
+                            self.conversation_histories[i]
                         )
                         
-                        should_stop = self._check_feedback_for_stop(feedback)
-                        if should_stop:
-                            feedback = "Stop Search: Yes"
-                        else:
-                            feedback = "Stop Search: No"
+                        # Store in conversation history
+                        self.conversation_histories[i] += f"\nMax iterations reached. Final answer: {final_answer}\n"
                         
-                        # Update conversation history
-                        self.conversation_histories[i] += f"\nQuery: {contents[i]}\nSearch results: {search_result}\nFeedback: {feedback}"
-                        
-                        # CHANGE: Always include information tags
-                        next_obs.append(f'\n\n<information>{search_result.strip()}</information>\n\n<feedback>{feedback}</feedback>\n\n')
-                    else:
-                        feedback = "No search was performed as search is disabled."
-                        next_obs.append(f'\n\n<information>Search disabled.</information>\n\n<feedback>{feedback}</feedback>\n\n')
+                        # Include the answer in the observation
+                        next_obs.append(f'\n\n<answer>{final_answer}</answer>\n\n<zeroshot_answer>{zero_shot_answer}</zeroshot_answer>\n\n')
+                        dones.append(True)
+                        valid_action.append(1)
+                        is_search.append(0)
                     
-                    # CHANGE: Check feedback for stop search signal
-                    dones.append(should_stop)  # End if feedback indicates to stop
-                    valid_action.append(1)
-                    is_search.append(1)
                 else:
                     # Invalid action
-                    feedback = "My previous action is invalid. I should put my search query between <query> and </query> tags. Let me try again."
+                    feedback = "My previous action is invalid. I should put my search query between <query> and </query> tags in JSON format. Let me try again."
                     next_obs.append(f'\n<feedback>{feedback}</feedback>\n')
                     
                     # Update conversation history
-                    self.conversation_histories[i] += f"\nInvalid action\nFeedback: {feedback}"
+                    # self.conversation_histories[i] += f"\nInvalid action\nFeedback: {feedback}"
                     
                     dones.append(False)
                     valid_action.append(0)
@@ -707,11 +715,12 @@ class LLMGenerationManager:
         """
         actions = []
         contents = []
+        search_complete_flags = []
                 
         for prediction in predictions:
             if isinstance(prediction, str): # for llm output
                 # Extract search queries
-                answer_match = re.search(r'<answer>(.*?)</answer>', prediction, re.DOTALL)
+                search_complete_match = re.search(r'<search_complete>(.*?)</search_complete>', prediction, re.DOTALL)
                 query_match = re.search(r'<query>(.*?)</query>', prediction, re.DOTALL)
                 
                 if query_match:
@@ -743,14 +752,27 @@ class LLMGenerationManager:
                 else:
                     content = ''
                     action = None
+                
+                search_complete = False
+                if search_complete_match:
+                    # Check if search is complete
+                    complete_text = search_complete_match.group(1).strip().lower()
+                    search_complete = complete_text == "true" or complete_text == "yes" or complete_text == "1"
+                    if search_complete:
+                        content = ""
+                        action = "search_complete"
+                
+                                
+                actions.append(action)
+                contents.append(content)
+                search_complete_flags.append(search_complete)
             else:
-                content = ''
-                action = None
+                actions.append(None)
+                contents.append('')
+                search_complete_flags.append(False)
             
-            actions.append(action)
-            contents.append(content)
-            
-        return actions, contents
+        return actions, contents, search_complete_flags
+    
 
     def _compose_final_output(self, left_side: Dict,
                             right_side: Dict,

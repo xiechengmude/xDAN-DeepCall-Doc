@@ -162,7 +162,8 @@ def compute_score_rag(solution_str, ground_truth, format_score=0.):
     answer_score = 0
     zeroshot_answer_score = 0
     
-    retrieval_check = "recall" if ground_truth["gt_docs"] != [] else "span"
+    # retrieval_check = "recall" if ground_truth["gt_docs"] != [] else "span"
+    retrieval_check = "span"
     
     answer = extract_answer(solution_str=solution_str)
     zeroshot_answer = extract_zeroshot_answer(solution_str=solution_str)

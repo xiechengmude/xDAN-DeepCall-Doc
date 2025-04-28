@@ -526,12 +526,6 @@ class LLMGenerationManager:
                             conversation_history=self.conversation_histories[i]
                         )
                         
-                        should_stop = self._check_feedback_for_stop(feedback)
-                        if should_stop:
-                            feedback = "Stop Search: Yes"
-                        else:
-                            feedback = "Stop Search: No"
-                        
                         # Update conversation history
                         self.conversation_histories[i] += f"\nQuery: {contents[i]}\nSearch results: {search_result}\nFeedback: {feedback}"
                         
@@ -542,6 +536,7 @@ class LLMGenerationManager:
                         next_obs.append(f'\n\n<information>Search disabled.</information>\n\n<feedback>{feedback}</feedback>\n\n')
                     
                     # CHANGE: Check feedback for stop search signal
+                    should_stop = self._check_feedback_for_stop(feedback)
                     dones.append(should_stop)  # End if feedback indicates to stop
                     valid_action.append(1)
                     is_search.append(1)
@@ -559,6 +554,20 @@ class LLMGenerationManager:
             
         return next_obs, dones, valid_action, is_search
     
+    # def _extract_original_question(self, text: str) -> str:
+    #     """Extract the original question from the input text."""
+    #     # Look for a question pattern, e.g., "Q: What is..." or just the first sentence
+    #     question_match = re.search(r'Q:\s*(.*?)(?=\n|$)', text, re.DOTALL)
+    #     if question_match:
+    #         return question_match.group(1).strip()
+        
+    #     # If no explicit question format, take the first sentence
+    #     sentences = re.split(r'(?<=[.!?])\s+', text)
+    #     if sentences:
+    #         return sentences[0].strip()
+            
+    #     # Fallback
+    #     return text.strip()
     
     def _generate_feedback(self, original_question: str, query: str, search_result: str, conversation_history: str = "") -> str:
         """
@@ -580,19 +589,17 @@ class LLMGenerationManager:
             conversation_history=conversation_history
         )
         
-        max_length = 30
-        
         # Call the appropriate external LLM based on configuration
         if self.config.generator_llm == "claude-3.5":
-            feedback = self.get_claude_response(prompt, llm='sonnet', max_tokens=max_length)
+            feedback = self.get_claude_response(prompt, llm='sonnet')
         elif self.config.generator_llm == "claude-3":
-            feedback = self.get_claude_response(prompt, llm='haiku', max_tokens=max_length)
+            feedback = self.get_claude_response(prompt, llm='haiku')
         elif self.config.generator_llm == "gpt-3.5":
-            feedback = self.gpt_chat_35_msg(prompt, max_tokens=max_length)
+            feedback = self.gpt_chat_35_msg(prompt)
         elif self.config.generator_llm == "gpt-4o-mini":
-            feedback = self.gpt_chat_4omini(prompt, max_tokens=max_length)
+            feedback = self.gpt_chat_4omini(prompt)
         elif self.config.generator_llm == "gpt-4o":
-            feedback = self.gpt_chat_4o(prompt, max_tokens=max_length)
+            feedback = self.gpt_chat_4o(prompt)
         else:
             # Default to simple feedback if no valid LLM is specified
             print("[Warning] No valid LLM is specified. Using simple feedback.")

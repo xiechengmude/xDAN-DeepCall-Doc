@@ -31,20 +31,21 @@ import argparse
 #         """This works for any base model"""
 #         prefix = f"""Answer the given question. \
 # You must conduct reasoning inside <think> and </think> first every time you get new information. \
-# After reasoning, if you find you lack some knowledge, you can call a search engine by <search> query </search> and it will return the top searched results between <information> and </information>. \
+# After reasoning, if you find you lack some knowledge, you can call a search engine by <query> and it will return the top searched results between <information> and </information>. \
 # You can search as many times as your want. \
 # If you find no further external knowledge needed, you can directly provide the answer inside <answer> and </answer>, without detailed illustrations. For example, <answer> Beijing </answer>. Question: {question}\n"""
 #     else:
 #         raise NotImplementedError
 #     return prefix
+# Note: The search query should use Boolean operators (AND, OR) and parentheses for grouping terms appropriately.
 
 def make_prefix(dp, retriever):
 
     input_str = """<|im_start|>system\nA conversation between User and Assistant. The User asks a question, and the Assistant solves it.<|im_end|>\n<|im_start|>user\n"""
-    input_str += """You are a search copilot for the generation model. Based on a user's query, you will go through a loop of <think> -> <query> -> <information> -> <feedback> -> <think> -> <query> -> ..., to help the generation model to generate a better answer with more relevant information searched.
+    input_str += """You are a search copilot for the generation model. Based on a user's query, you will go through a loop of <think> -> <query> -> <information> -> <think> -> <query> or <search_complete> -> ..., to help the generation model to generate a better answer with more relevant information searched.
 You should show your thinking process between <think> and </think>. You should show the search query between <query> and </query> in JSON format.
-Based on the search query, we will return the top searched results between <information> and </information> and the feedback from generation model between <feedback> and </feedback>.
-Based on the feedback, you should think again and generate a new search query.
+Based on the search query, we will return the top searched results between <information> and </information>.
+After reviewing the information, you must decide whether to continue searching with a new query or indicate that the search is complete. If you need more information, formulate a new search query OR use <search_complete>False</search_complete> to indicate you want to continue searching with a better query. If you have sufficient information, use <search_complete>True</search_complete> to indicate that you have gathered enough information for the generation model to produce an answer.
 """
 
     if retriever == "bm25":
@@ -60,7 +61,7 @@ For a question:
 
 The loop is as follows:
 <think>
-[your thinking process]
+I need to search for some basic information about this topic first.
 </think>
 <query>
 {
@@ -70,17 +71,43 @@ The loop is as follows:
 <information>
 [top searched results]
 </information>
-<feedback>
-[feedback from generation model]
-</feedback>
 <think>
-[your thinking process]
+The search results provide some useful information, but I need more specific details about X.
 </think>
 <query>
 {
-    "query": "[your search query]"
+    "query": "[your more specific search query]"
 }
 </query>
+<information>
+[top searched results]
+</information>
+<think>
+I still need more information about Y aspect of the question.
+</think>
+<search_complete>
+False
+</search_complete>
+<information>
+[system message indicating to try a new query]
+</information>
+<think>
+Let me try a different approach to get information about Y.
+</think>
+<query>
+{
+    "query": "[your refined search query]"
+}
+</query>
+<information>
+[top searched results]
+</information>
+<think>
+Now I have sufficient information for the generation model to answer the question.
+</think>
+<search_complete>
+True
+</search_complete>
 ...
 
 Now, start the loop with the following question:
@@ -97,6 +124,7 @@ Assistant: Let me solve this step by step.
     return input_str
 
 
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--local_dir', default='./data/nq_search')
@@ -106,6 +134,7 @@ if __name__ == '__main__':
 
     args = parser.parse_args()
 
+    # data_source = 'nq'
     data_sources = args.data_sources.split(',')
     all_dataset = []
 
@@ -113,26 +142,23 @@ if __name__ == '__main__':
 
         dataset = datasets.load_dataset('RUC-NLPIR/FlashRAG_datasets', data_source)
 
-        if 'test' in dataset:
-            print(f'Using the {data_source} test dataset...')
-            test_dataset = dataset['test']
-        elif 'dev' in dataset:
-            print(f'Using the {data_source} dev dataset...')
-            test_dataset = dataset['dev']
-        else:
-            print(f'Using the {data_source} train dataset...')
-            test_dataset = dataset['train']
+        train_dataset = dataset['train']
 
         # add a row to each data item that represents a unique id
         def make_map_fn(split):
 
             def process_fn(example, idx):
+                
+                if "yes" in example['golden_answers'] or "no" in example['golden_answers'] or "true" in example['golden_answers'] or "false" in example['golden_answers'] or "Yes" in example['golden_answers'] or "No" in example['golden_answers'] or "True" in example['golden_answers'] or "False" in example['golden_answers']:
+                    return None
+                
                 example['question'] = example['question'].strip()
                 if example['question'][-1] != '?':
                     example['question'] += '?'
                 question = make_prefix(example, args.retriever)
                 solution = {
                     "target": example['golden_answers'],
+                    "gt_docs": example['supporting_facts'] if 'supporting_facts' in example else []
                 }
 
                 data = {
@@ -155,14 +181,14 @@ if __name__ == '__main__':
 
             return process_fn
 
-        test_dataset = test_dataset.map(function=make_map_fn('test'), with_indices=True)
-        all_dataset.append(test_dataset)
+        train_dataset = train_dataset.map(function=make_map_fn('train'), with_indices=True)
+        all_dataset.append(train_dataset)
 
     local_dir = args.local_dir
     hdfs_dir = args.hdfs_dir
 
-    all_test_dataset = datasets.concatenate_datasets(all_dataset)
-    all_test_dataset.to_parquet(os.path.join(local_dir, f'test_{args.retriever}.parquet'))
+    all_train_dataset = datasets.concatenate_datasets(all_dataset)
+    all_train_dataset.to_parquet(os.path.join(local_dir, f'train_{args.retriever}_self.parquet'))
 
     if hdfs_dir is not None:
         makedirs(hdfs_dir)

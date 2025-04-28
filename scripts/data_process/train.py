@@ -39,13 +39,19 @@ import argparse
 #     return prefix
 # Note: The search query should use Boolean operators (AND, OR) and parentheses for grouping terms appropriately.
 
-def make_prefix(dp):
+def make_prefix(dp, retriever):
 
     input_str = """<|im_start|>system\nA conversation between User and Assistant. The User asks a question, and the Assistant solves it.<|im_end|>\n<|im_start|>user\n"""
     input_str += """You are a search copilot for the generation model. Based on a user's query, you will go through a loop of <think> -> <query> -> <information> -> <feedback> -> <think> -> <query> -> ..., to help the generation model to generate a better answer with more relevant information searched.
 You should show your thinking process between <think> and </think>. You should show the search query between <query> and </query> in JSON format.
 Based on the search query, we will return the top searched results between <information> and </information> and the feedback from generation model between <feedback> and </feedback>.
 Based on the feedback, you should think again and generate a new search query.
+"""
+
+    if retriever == "bm25":
+        input_str += """Note: The search query should use Boolean operators (AND, OR) and parentheses for grouping terms appropriately."""
+
+    input_str += """
 
 EXAMPLE:
 For a question:
@@ -97,6 +103,7 @@ if __name__ == '__main__':
     parser.add_argument('--local_dir', default='./data/nq_search')
     parser.add_argument('--hdfs_dir', default=None)
     parser.add_argument('--data_sources', default='nq')
+    parser.add_argument('--retriever', default="bm25")
 
     args = parser.parse_args()
 
@@ -114,10 +121,14 @@ if __name__ == '__main__':
         def make_map_fn(split):
 
             def process_fn(example, idx):
+                
+                if "yes" in example['golden_answers'] or "no" in example['golden_answers'] or "true" in example['golden_answers'] or "false" in example['golden_answers'] or "Yes" in example['golden_answers'] or "No" in example['golden_answers'] or "True" in example['golden_answers'] or "False" in example['golden_answers']:
+                    return None
+                
                 example['question'] = example['question'].strip()
                 if example['question'][-1] != '?':
                     example['question'] += '?'
-                question = make_prefix(example)
+                question = make_prefix(example, args.retriever)
                 solution = {
                     "target": example['golden_answers'],
                     "gt_docs": example['supporting_facts'] if 'supporting_facts' in example else []
@@ -150,7 +161,7 @@ if __name__ == '__main__':
     hdfs_dir = args.hdfs_dir
 
     all_train_dataset = datasets.concatenate_datasets(all_dataset)
-    all_train_dataset.to_parquet(os.path.join(local_dir, 'train.parquet'))
+    all_train_dataset.to_parquet(os.path.join(local_dir, f'train_{args.retriever}.parquet'))
 
     if hdfs_dir is not None:
         makedirs(hdfs_dir)

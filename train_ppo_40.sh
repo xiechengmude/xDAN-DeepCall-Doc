@@ -7,21 +7,6 @@ WAND_PROJECT="Search-C1"
 
 export BASE_MODEL='Qwen/Qwen2.5-3B-Instruct'
 export EXPERIMENT_NAME="search-c1-ppo-qwen2.5-3b-rag-bm25-40G"
-# export BASE_MODEL='Qwen/Qwen2.5-3B-Instruct'
-# export EXPERIMENT_NAME=${train_data}-${test_data}-search-r1-ppo-qwen2.5-3b-it-em
-# export BASE_MODEL='Qwen/Qwen2.5-7B'
-# export EXPERIMENT_NAME=${train_data}-${test_data}-search-r1-ppo-qwen2.5-7b-em
-# export BASE_MODEL='Qwen/Qwen2.5-7B-Instruct'
-# export EXPERIMENT_NAME=${train_data}-${test_data}-search-r1-ppo-qwen2.5-7b-it-em
-# export BASE_MODEL='Qwen/Qwen2.5-14B'
-# export EXPERIMENT_NAME=${train_data}-${test_data}-search-r1-ppo-qwen2.5-14b-em
-# export BASE_MODEL='Qwen/Qwen2.5-14B-Instruct'
-# export EXPERIMENT_NAME=${train_data}-${test_data}-search-r1-ppo-qwen2.5-14b-it-em
-
-# set -x
-# export VLLM_ATTENTION_BACKEND=XFORMERS # vllm + qwen2-7b with flash_attn has some issues
-
-# max_prompt_length = (config['training']['max_start_length'] + config['training']['max_response_length'] * (config['training']['max_turns'] - 1) + config['training']['max_obs_length'] * config['training']['max_turns'])
 
 PYTHONUNBUFFERED=1 python3 -m verl.trainer.main_ppo \
     data.train_files=$DATA_DIR/train_bm25.parquet \
@@ -81,7 +66,7 @@ PYTHONUNBUFFERED=1 python3 -m verl.trainer.main_ppo \
     trainer.total_training_steps=1005 \
     trainer.default_hdfs_dir=null \
     trainer.default_local_dir=verl_checkpoints/$EXPERIMENT_NAME \
-    max_turns=2 \
+    max_turns=4 \
     +generator_llm="claude-3" \
     retriever.url="http://127.0.0.1:5000/retrieve" \
     retriever.topk=3 \
