@@ -211,18 +211,21 @@ def compute_score_rag(solution_str, ground_truth, format_score=0.):
         print(f"Solution string: {solution_str}")
     
     
-    # if both answer and zeroshot answer are correct, the correctness is not coming from retrieval, but it is good, thus we return weak combined score
-    if answer_score > 0 and zeroshot_answer_score > 0:
-        return retrieval_score + answer_score / 2
+    # # if both answer and zeroshot answer are correct, the correctness is not coming from retrieval, but it is good, thus we return weak combined score
+    # if answer_score > 0 and zeroshot_answer_score > 0:
+    #     return retrieval_score + answer_score / 2
     
-    # if answer is correct but zeroshot answer is incorrect, the correctness is coming from retrieval, thus we return combined score
-    if answer_score > 0 and zeroshot_answer_score == 0:
-        return retrieval_score + answer_score
+    # # if answer is correct but zeroshot answer is incorrect, the correctness is coming from retrieval, thus we return combined score
+    # if answer_score > 0 and zeroshot_answer_score == 0:
+    #     return retrieval_score + answer_score
     
-    # if answer is incorrect but zeroshot answer is correct, the wrongness is coming from retrieval, thus we return negative score
-    if answer_score == 0 and zeroshot_answer_score > 0:
-        return -1
+    # # if answer is incorrect but zeroshot answer is correct, the wrongness is coming from retrieval, thus we return negative score
+    # if answer_score == 0 and zeroshot_answer_score > 0:
+    #     return -1
     
-    # if both are incorrect, we return 0, we don't know how retrieval contributes to the wrongness, thus we return retrieval score
-    if answer_score == 0 and zeroshot_answer_score == 0:
-        return retrieval_score
+    # # if both are incorrect, we return 0, we don't know how retrieval contributes to the wrongness, thus we return retrieval score
+    # if answer_score == 0 and zeroshot_answer_score == 0:
+    #     return retrieval_score
+    
+    return answer_score
+    
