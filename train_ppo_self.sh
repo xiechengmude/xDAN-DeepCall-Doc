@@ -1,12 +1,12 @@
 data_name=nq_hotpotqa_train
 
-export CUDA_VISIBLE_DEVICES=1,2,3,4
+export CUDA_VISIBLE_DEVICES=4,5,6,7
 export DATA_DIR=data/${data_name} # first download the data from https://huggingface.co/datasets/PeterJinGo/nq_hotpotqa_train
 
 WAND_PROJECT="Search-C1"
 
 export BASE_MODEL='Qwen/Qwen2.5-3B-Instruct'
-export EXPERIMENT_NAME="search-c1-ppo-qwen2.5-3b-rag-bm25-perp"
+export EXPERIMENT_NAME="search-c1-ppo-qwen2.5-3b-rag-bm25-self"
 # export BASE_MODEL='Qwen/Qwen2.5-3B-Instruct'
 # export EXPERIMENT_NAME=${train_data}-${test_data}-search-r1-ppo-qwen2.5-3b-it-em
 # export BASE_MODEL='Qwen/Qwen2.5-7B'
@@ -24,8 +24,8 @@ export EXPERIMENT_NAME="search-c1-ppo-qwen2.5-3b-rag-bm25-perp"
 # max_prompt_length = (config['training']['max_start_length'] + config['training']['max_response_length'] * (config['training']['max_turns'] - 1) + config['training']['max_obs_length'] * config['training']['max_turns'])
 
 PYTHONUNBUFFERED=1 python3 -m verl.trainer.main_ppo \
-    data.train_files=$DATA_DIR/train_bm25_perp.parquet \
-    data.val_files=$DATA_DIR/test_bm25_perp.parquet \
+    data.train_files=$DATA_DIR/train_bm25_self.parquet \
+    data.val_files=$DATA_DIR/test_bm25_self.parquet \
     data.train_data_num=null \
     data.val_data_num=null \
     data.train_batch_size=128 \
@@ -82,7 +82,7 @@ PYTHONUNBUFFERED=1 python3 -m verl.trainer.main_ppo \
     trainer.total_training_steps=1005 \
     trainer.default_hdfs_dir=null \
     trainer.default_local_dir=verl_checkpoints/$EXPERIMENT_NAME \
-    max_turns=3 \
+    max_turns=4 \
     +generator_llm="claude-3" \
     retriever.url="http://127.0.0.1:9000/retrieve" \
     retriever.topk=3 \

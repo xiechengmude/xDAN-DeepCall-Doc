@@ -1,26 +1,26 @@
 import requests
 import math
 from transformers import AutoTokenizer
-
+from generator_llms.test_cases import test_cases
 # Load matching tokenizer locally
-MODEL = "Qwen/Qwen2.5-7B"  
+MODEL = "Qwen/Qwen3-14B"  
 tokenizer = AutoTokenizer.from_pretrained(MODEL)
 
-def compute_alternative_perplexity(prompt: str, answer: str, num_runs: int = 1) -> float:
+def compute_alternative_perplexity(prompt: str, answer: str, num_runs: int = 10) -> float:
     """
     Calculate perplexity using the sliding window approach.
     This makes multiple API calls for each token in the answer.
     Runs multiple times and returns the average perplexity after filtering outliers.
     Uses GPT-2 Small model for more stable perplexity computation.
     """
-    print(f"Computing perplexity for prompt: '{prompt}'")
-    print(f"Will run {num_runs} times and take average after filtering outliers")
-    print(f"Using model: {MODEL}")
+    # print(f"Computing perplexity for prompt: '{prompt}'")
+    # print(f"Will run {num_runs} times and take average after filtering outliers")
+    # print(f"Using model: {MODEL}")
     
     all_perplexities = []
     
     for run in range(num_runs):
-        print(f"\nRun {run + 1}/{num_runs}")
+        # print(f"\nRun {run + 1}/{num_runs}")
         headers = {"Content-Type": "application/json"}
         
         # Prepare the base prompt
@@ -29,7 +29,7 @@ def compute_alternative_perplexity(prompt: str, answer: str, num_runs: int = 1) 
         # Tokenize the answer to get its length
         answer_tokens = tokenizer.encode(answer.strip(), add_special_tokens=False)
         answer_token_strings = tokenizer.convert_ids_to_tokens(answer_tokens)
-        print(f"Answer has {len(answer_tokens)} tokens: {answer_token_strings}")
+        # print(f"Answer has {len(answer_tokens)} tokens: {answer_token_strings}")
         
         # Go through the answer token by token
         cumulative_answer = ""
@@ -54,7 +54,7 @@ def compute_alternative_perplexity(prompt: str, answer: str, num_runs: int = 1) 
                 "prompt": current_prompt,
                 "max_tokens": 1,
                 "logprobs": True,
-                "temperature": 0,  # Use deterministic sampling
+                "temperature": 0.7,  # Use deterministic sampling
                 "top_p": 1.0,  # No top-p sampling
                 "frequency_penalty": 0.0,  # No frequency penalty
                 "presence_penalty": 0.0  # No presence penalty
@@ -66,14 +66,14 @@ def compute_alternative_perplexity(prompt: str, answer: str, num_runs: int = 1) 
                 res = response.json()
                 
                 if "choices" not in res or not res["choices"] or "logprobs" not in res["choices"][0]:
-                    print(f"Warning: Invalid response at position {i}: {res}")
+                    # print(f"Warning: Invalid response at position {i}: {res}")
                     continue
                     
                 # Get the logprob for the most likely next token
                 top_logprobs = res["choices"][0]["logprobs"].get("top_logprobs", [{}])
                 
                 if not top_logprobs or not isinstance(top_logprobs[0], dict):
-                    print(f"Warning: No top logprobs at position {i}")
+                    # print(f"Warning: No top logprobs at position {i}")
                     continue
                     
                 # Find the most likely next token and its logprob
@@ -84,14 +84,14 @@ def compute_alternative_perplexity(prompt: str, answer: str, num_runs: int = 1) 
                     if token.strip() in next_text or next_text.strip() in token:
                         next_token_prob = logprob
                         token_matched = True
-                        print(f"Token {i+1}/{len(answer_tokens)}: '{next_text}' - logprob: {logprob:.4f}")
+                        # print(f"Token {i+1}/{len(answer_tokens)}: '{next_text}' - logprob: {logprob:.4f}")
                         break
                         
                 if not token_matched and top_logprobs[0]:
                     # If no match, use the most likely token's probability
                     most_likely_token = max(top_logprobs[0].items(), key=lambda x: x[1])
                     next_token_prob = most_likely_token[1]
-                    print(f"Token {i+1}/{len(answer_tokens)}: '{next_text}' - No exact match, using most likely token '{most_likely_token[0]}' with logprob: {next_token_prob:.4f}")
+                    # print(f"Token {i+1}/{len(answer_tokens)}: '{next_text}' - No exact match, using most likely token '{most_likely_token[0]}' with logprob: {next_token_prob:.4f}")
                     
                 if next_token_prob is not None:
                     total_logprob += next_token_prob
@@ -106,7 +106,7 @@ def compute_alternative_perplexity(prompt: str, answer: str, num_runs: int = 1) 
         
         # Calculate perplexity for this run
         if total_logprob == 0 or len(answer_tokens) == 0:
-            print("Warning: Could not calculate logprobs for this run, skipping")
+            # print("Warning: Could not calculate logprobs for this run, skipping")
             continue
             
         avg_logprob = total_logprob / len(answer_tokens)
@@ -114,17 +114,17 @@ def compute_alternative_perplexity(prompt: str, answer: str, num_runs: int = 1) 
         all_perplexities.append(perplexity)
         
         # Show token-by-token breakdown for this run
-        print("\nToken-by-token breakdown:")
-        for i, (token, logprob) in enumerate(zip(answer_token_strings, token_logprobs)):
-            print(f"{i+1}. '{token}': logprob = {logprob:.4f}, perplexity = {math.exp(-logprob):.4f}")
+        # print("\nToken-by-token breakdown:")
+        # for i, (token, logprob) in enumerate(zip(answer_token_strings, token_logprobs)):
+            # print(f"{i+1}. '{token}': logprob = {logprob:.4f}, perplexity = {math.exp(-logprob):.4f}")
         
-        print(f"\nRun {run + 1} results:")
-        print(f"Total logprob: {total_logprob:.4f}")
-        print(f"Average logprob: {avg_logprob:.4f}")
-        print(f"Perplexity: {perplexity:.4f}")
+        # print(f"\nRun {run + 1} results:")
+        # print(f"Total logprob: {total_logprob:.4f}")
+        # print(f"Average logprob: {avg_logprob:.4f}")
+        # print(f"Perplexity: {perplexity:.4f}")
     
     if not all_perplexities:
-        print("Warning: No valid perplexity calculations, returning default value")
+        # print("Warning: No valid perplexity calculations, returning default value")
         return 1.0
     
     def filter_outliers(values, max_iterations=5):
@@ -154,17 +154,17 @@ def compute_alternative_perplexity(prompt: str, answer: str, num_runs: int = 1) 
     filtered_perplexities = filter_outliers(all_perplexities)
     
     if not filtered_perplexities:
-        print("Warning: All values were filtered as outliers, using original values")
+        # print("Warning: All values were filtered as outliers, using original values")
         filtered_perplexities = all_perplexities
     
     # Calculate and return the average perplexity after filtering outliers
     avg_perplexity = sum(filtered_perplexities) / len(filtered_perplexities)
-    print(f"\nFinal Results (after filtering outliers):")
-    print(f"Original values: {all_perplexities}")
-    print(f"Filtered values: {filtered_perplexities}")
-    print(f"Number of outliers removed: {len(all_perplexities) - len(filtered_perplexities)}")
-    print(f"Average perplexity: {avg_perplexity:.4f}")
-    print(f"Standard deviation: {math.sqrt(sum((x - avg_perplexity) ** 2 for x in filtered_perplexities) / len(filtered_perplexities)):.4f}")
+    # print(f"\nFinal Results (after filtering outliers):")
+    # print(f"Original values: {all_perplexities}")
+    # print(f"Filtered values: {filtered_perplexities}")
+    # print(f"Number of outliers removed: {len(all_perplexities) - len(filtered_perplexities)}")
+    # print(f"Average perplexity: {avg_perplexity:.4f}")
+    # print(f"Standard deviation: {math.sqrt(sum((x - avg_perplexity) ** 2 for x in filtered_perplexities) / len(filtered_perplexities)):.4f}")
     
     return avg_perplexity
 
@@ -175,129 +175,6 @@ def compare_hotpotqa_style_examples():
     similar to HotpotQA examples.
     """
     # Define several test cases more similar to HotpotQA
-    test_cases = [
-        {
-            "name": "Birth Year",
-            "question": "When was Christopher Columbus born?",
-            "context": """
-            Christopher Columbus was an Italian explorer and navigator born in 1451 in the Republic of Genoa.
-            
-            The Renaissance was a period in European history that spanned from the 14th to the 17th century.
-            During this time, many great artists like Leonardo da Vinci and Michelangelo created their masterpieces.
-            The printing press was invented by Johannes Gutenberg around 1440, revolutionizing the spread of information.
-            
-            In 1492, Columbus sailed across the Atlantic Ocean, hoping to find a new route to Asia.
-            His voyages were sponsored by the Catholic Monarchs of Spain, Ferdinand and Isabella.
-            The Spanish Inquisition was established in 1478 to maintain Catholic orthodoxy in Spain.
-            
-            The Ottoman Empire was expanding during this period, capturing Constantinople in 1453.
-            The Black Death had devastated Europe in the 14th century, killing millions of people.
-            The Hundred Years' War between England and France ended in 1453.
-            """,
-            "answer": "1451"
-        },
-        {
-            "name": "Nationality",
-            "question": "What nationality was Marie Curie?",
-            "context": """
-            Marie Curie was a Polish-born physicist and chemist who conducted pioneering research on radioactivity.
-            
-            The field of physics saw many breakthroughs in the late 19th and early 20th centuries.
-            Albert Einstein published his theory of relativity in 1905, revolutionizing our understanding of space and time.
-            Niels Bohr developed the Bohr model of the atom in 1913, which explained atomic structure.
-            
-            Poland has a rich history of scientific contributions.
-            Nicolaus Copernicus, who proposed the heliocentric model of the solar system, was also Polish.
-            The Polish-Lithuanian Commonwealth was one of the largest and most populous countries in 16th and 17th century Europe.
-            
-            Radioactivity was first discovered by Henri Becquerel in 1896.
-            The Curie family made significant contributions to the study of radiation.
-            Pierre Curie, Marie's husband, was a French physicist who worked alongside her.
-            """,
-            "answer": "Polish"
-        },
-        {
-            "name": "Capital City",
-            "question": "What is the capital of Denmark?",
-            "context": """
-            Denmark is a Nordic country with a population of around 5.8 million. Its capital and largest city is Copenhagen.
-            
-            The Nordic countries include Sweden, Norway, Finland, Iceland, and Denmark.
-            These countries are known for their high standard of living and social welfare systems.
-            The Scandinavian Peninsula consists of Sweden and Norway, while Denmark is located on the Jutland Peninsula.
-            
-            Copenhagen is famous for its historic architecture and modern design.
-            The Little Mermaid statue, based on Hans Christian Andersen's fairy tale, is a major tourist attraction.
-            Tivoli Gardens, one of the oldest amusement parks in the world, is located in Copenhagen.
-            
-            The Danish monarchy is one of the oldest in the world, dating back to the Viking Age.
-            Denmark is a constitutional monarchy with a parliamentary system.
-            The country is known for its bicycle culture and environmental sustainability initiatives.
-            """,
-            "answer": "Copenhagen"
-        },
-        {
-            "name": "Scientific Discovery",
-            "question": "What did Marie Curie discover and when?",
-            "context": """
-            Marie Curie was a Polish-born physicist and chemist who conducted pioneering research on radioactivity.
-            In 1898, she and her husband Pierre discovered two new elements: polonium and radium.
-            
-            The field of physics saw many breakthroughs in the late 19th and early 20th centuries.
-            Albert Einstein published his theory of relativity in 1905, revolutionizing our understanding of space and time.
-            Niels Bohr developed the Bohr model of the atom in 1913, which explained atomic structure.
-            
-            Radioactivity was first discovered by Henri Becquerel in 1896 when he noticed that uranium salts emitted rays that could expose photographic plates.
-            The Curie family made significant contributions to the study of radiation.
-            Pierre Curie, Marie's husband, was a French physicist who worked alongside her.
-            
-            The Nobel Prize in Physics was awarded to Becquerel and the Curies in 1903 for their work on radioactivity.
-            Marie Curie later won a second Nobel Prize in Chemistry in 1911 for her discovery of radium and polonium.
-            """,
-            "answer": "Marie Curie discovered the elements polonium and radium in 1898"
-        },
-        {
-            "name": "Historical Event",
-            "question": "What happened during Columbus's first voyage to the Americas?",
-            "context": """
-            Christopher Columbus was an Italian explorer and navigator born in 1451 in the Republic of Genoa.
-            In 1492, Columbus set sail from Spain with three ships: the Santa Maria, the Pinta, and the Niña.
-            
-            The Renaissance was a period in European history that spanned from the 14th to the 17th century.
-            During this time, many great artists like Leonardo da Vinci and Michelangelo created their masterpieces.
-            The printing press was invented by Johannes Gutenberg around 1440, revolutionizing the spread of information.
-            
-            Columbus's first voyage lasted from August 3, 1492, to March 15, 1493.
-            He landed in the Bahamas on October 12, 1492, thinking he had reached Asia.
-            The Santa Maria ran aground on Christmas Day 1492 and had to be abandoned.
-            
-            The Ottoman Empire was expanding during this period, capturing Constantinople in 1453.
-            The Black Death had devastated Europe in the 14th century, killing millions of people.
-            The Hundred Years' War between England and France ended in 1453.
-            """,
-            "answer": "Columbus sailed from Spain with three ships, landed in the Bahamas on October 12, 1492, and the Santa Maria was lost on Christmas Day"
-        },
-        {
-            "name": "Geographical Feature",
-            "question": "What are some notable geographical features of Denmark?",
-            "context": """
-            Denmark is a Nordic country with a population of around 5.8 million. Its capital and largest city is Copenhagen.
-            
-            The Nordic countries include Sweden, Norway, Finland, Iceland, and Denmark.
-            These countries are known for their high standard of living and social welfare systems.
-            The Scandinavian Peninsula consists of Sweden and Norway, while Denmark is located on the Jutland Peninsula.
-            
-            Denmark consists of the Jutland Peninsula and over 400 islands, with Zealand being the largest.
-            The country is mostly flat, with its highest point being Møllehøj at 170.86 meters above sea level.
-            Denmark has a long coastline and is surrounded by the North Sea and the Baltic Sea.
-            
-            The Danish monarchy is one of the oldest in the world, dating back to the Viking Age.
-            Denmark is a constitutional monarchy with a parliamentary system.
-            The country is known for its bicycle culture and environmental sustainability initiatives.
-            """,
-            "answer": "Denmark consists of the Jutland Peninsula and over 400 islands, with Zealand being the largest, and has a mostly flat landscape with its highest point at Møllehøj"
-        }
-    ]
     
     results = []
     
@@ -339,5 +216,76 @@ def compare_hotpotqa_style_examples():
         print(f"{result['name']:<15} {result['q_only_ppl']:<15.4f} {result['context_q_ppl']:<15.4f} {result['ratio']:<15.4f} {effect:<20}")
 
 
+def compute_retrieval_utility_score(prompt: str, answer: str, context: str, num_runs: int = 10) -> float:
+    """
+    Calculate retrieval utility score by comparing context + question vs question-only scenarios.
+    Runs multiple times and returns the ratio of times context + question wins.
+    
+    Args:
+        prompt: The question to be answered
+        answer: The expected answer
+        context: The context to be added to the question
+        num_runs: Number of times to run the comparison
+        
+    Returns:
+        float: The ratio of times context + question had lower perplexity than question-only
+    """
+    # print(f"Computing retrieval utility score for question: '{prompt}'")
+    # print(f"Will run {num_runs} comparisons")
+    
+    context_wins = 0
+    prompt = prompt.lower()
+    answer = answer.lower()
+    context = context.lower()
+    
+    for run in range(num_runs):
+        # print(f"\nRun {run + 1}/{num_runs}")
+        
+        # Case 1: Question only
+        # print("\nCASE 1: QUESTION ONLY")
+        # print("-" * 40)
+        question_only_ppl = compute_alternative_perplexity(prompt, answer, num_runs=1)
+        
+        # Case 2: Context + Question
+        # print("\nCASE 2: CONTEXT + QUESTION")
+        # print("-" * 40)
+        context_question_ppl = compute_alternative_perplexity(context + "\n\n" + prompt, answer, num_runs=1)
+        
+        # Compare perplexities
+        if context_question_ppl < question_only_ppl:
+            context_wins += 1
+        #     print("✓ Context + Question wins this round")
+        # else:
+        #     print("✗ Question only wins this round")
+    
+    # Calculate and return the win ratio
+    win_ratio = context_wins / num_runs
+    # print(f"\nFinal Results:")
+    # print(f"Context + Question wins: {context_wins}/{num_runs}")
+    print(f"Retrieval Utility Score: {win_ratio:.4f}")
+    
+    return win_ratio
+
+
 if __name__ == "__main__":
-    compare_hotpotqa_style_examples()
+    # Example test case
+    
+    for test_case in test_cases:
+    
+        print("\n" + "=" * 80)
+        print(f"TEST CASE: {test_case['name']}")
+        print("=" * 80)
+        
+        # Calculate retrieval utility score
+        retrieval_score = compute_retrieval_utility_score(
+            prompt=test_case['question'],
+            answer=test_case['answer'],
+            context=test_case['context'],
+            num_runs=10
+        )
+        
+        print("\n" + "=" * 80)
+        print("FINAL RETRIEVAL UTILITY SCORE")
+        print("=" * 80)
+        print(f"Score: {retrieval_score:.4f}")
+        print(f"Interpretation: Context + Question was better {retrieval_score*100:.1f}% of the time")

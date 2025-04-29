@@ -41,7 +41,7 @@ from verl.utils.seqlen_balancing import get_seqlen_balanced_partitions, log_seql
 
 import re
 # from search_c1.llm_agent.generation import LLMGenerationManager, GenerationConfig
-from search_c1.llm_agent.generation_self import LLMGenerationManager, GenerationConfig
+from search_c1.llm_agent.generation_perp import LLMGenerationManager, GenerationConfig
 
 
 WorkerType = Type[Worker]
@@ -280,28 +280,57 @@ def compute_data_metrics(batch, use_critic=True):
 
     return metrics
 
+
 def compute_reward_metrics(batch):
     reward_tensor = batch.batch['token_level_scores'].sum(-1)
 
     reward_metrics = {}
     reward_metrics["reward/mean"] = torch.mean(reward_tensor).detach().item()
-
-    # Categorize rewards based on different score ranges
-
-    answer_incorrect = (reward_tensor < 1)
-    answer_correct = (reward_tensor >= 1)
-    answer_correct_zeroshot_correct = (reward_tensor >= 1.0) & (reward_tensor <= 2.0)
-    answer_correct_zeroshot_incorrect = (reward_tensor >= 2.0) & (reward_tensor <= 3.0)
-    answer_incorrect_zeroshot_correct = (reward_tensor == -1)
-
-    # Calculate means for different components
-    reward_metrics["reward/answer_incorrect_ratio"] = torch.sum(answer_incorrect).float() / reward_tensor.numel()
-    reward_metrics["reward/answer_correct_ratio"] = torch.sum(answer_correct).float() / reward_tensor.numel()
-    reward_metrics["reward/answer_correct_zeroshot_correct_ratio"] = torch.sum(answer_correct_zeroshot_correct).float() / reward_tensor.numel()
-    reward_metrics["reward/answer_correct_zeroshot_incorrect_ratio"] = torch.sum(answer_correct_zeroshot_incorrect).float() / reward_tensor.numel()
-    reward_metrics["reward/answer_incorrect_zeroshot_correct_ratio"] = torch.sum(answer_incorrect_zeroshot_correct).float() / reward_tensor.numel()
+    # Calculate all_correct ratio (value == 3)
+    seventy_recall = torch.sum(reward_tensor == 5).float() / reward_tensor.numel()
+    reward_metrics["reward/90_win_ratio"] = seventy_recall.detach().item()
+    
+    fifty_recall = torch.sum(reward_tensor >= 4).float() / reward_tensor.numel()
+    reward_metrics["reward/80_win_ratio"] = fifty_recall.detach().item()
+    
+    thirty_recall = torch.sum(reward_tensor >= 3).float() / reward_tensor.numel()
+    reward_metrics["reward/60_win_ratio"] = thirty_recall.detach().item()
+    
+    twenty_recall = torch.sum(reward_tensor >= 1).float() / reward_tensor.numel()
+    reward_metrics["reward/50_win_ratio"] = twenty_recall.detach().item()
+    
+    ten_recall = torch.sum(reward_tensor >= 0).float() / reward_tensor.numel()
+    reward_metrics["reward/40_win_ratio"] = ten_recall.detach().item()
+    
+    five_recall = torch.sum(reward_tensor >= -1).float() / reward_tensor.numel()
+    reward_metrics["reward/30_win_ratio"] = five_recall.detach().item()
+    
+    wrong_ratio = torch.sum(reward_tensor == -3).float() / reward_tensor.numel()
+    reward_metrics["reward/wrong_ratio"] = wrong_ratio.detach().item()
 
     return reward_metrics
+# def compute_reward_metrics(batch):
+#     reward_tensor = batch.batch['token_level_scores'].sum(-1)
+
+#     reward_metrics = {}
+#     reward_metrics["reward/mean"] = torch.mean(reward_tensor).detach().item()
+
+#     # Categorize rewards based on different score ranges
+
+#     answer_incorrect = (reward_tensor < 1)
+#     answer_correct = (reward_tensor >= 1)
+#     answer_correct_zeroshot_correct = (reward_tensor >= 1.0) & (reward_tensor <= 2.0)
+#     answer_correct_zeroshot_incorrect = (reward_tensor >= 2.0) & (reward_tensor <= 3.0)
+#     answer_incorrect_zeroshot_correct = (reward_tensor == -1)
+
+#     # Calculate means for different components
+#     reward_metrics["reward/answer_incorrect_ratio"] = torch.sum(answer_incorrect).float() / reward_tensor.numel()
+#     reward_metrics["reward/answer_correct_ratio"] = torch.sum(answer_correct).float() / reward_tensor.numel()
+#     reward_metrics["reward/answer_correct_zeroshot_correct_ratio"] = torch.sum(answer_correct_zeroshot_correct).float() / reward_tensor.numel()
+#     reward_metrics["reward/answer_correct_zeroshot_incorrect_ratio"] = torch.sum(answer_correct_zeroshot_incorrect).float() / reward_tensor.numel()
+#     reward_metrics["reward/answer_incorrect_zeroshot_correct_ratio"] = torch.sum(answer_incorrect_zeroshot_correct).float() / reward_tensor.numel()
+
+#     return reward_metrics
 
 # def compute_reward_metrics(batch):
 #     reward_tensor = batch.batch['token_level_scores'].sum(-1)
