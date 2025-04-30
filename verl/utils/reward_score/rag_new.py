@@ -15,12 +15,16 @@
 import re
 import string
 import random
-from generator_llms.local import compute_retrieval_utility_score, generate_answer
 from pyserini.eval.evaluate_dpr_retrieval import has_answers, SimpleTokenizer
+from generator_llms.local import *
 
 _tokenizer = SimpleTokenizer()
 
+
 def normalize_answer(s):
+    def remove_articles(text):
+        return re.sub(r"\b(a|an|the)\b", " ", text)
+
     def white_space_fix(text):
         return " ".join(text.split())
 
@@ -31,7 +35,7 @@ def normalize_answer(s):
     def lower(text):
         return text.lower()
 
-    return white_space_fix(remove_punc(lower(s)))
+    return white_space_fix(remove_articles(remove_punc(lower(s))))
 
 
 def answer_span_check(prediction, golden_answers):
@@ -70,83 +74,68 @@ def extract_texts(solution_str):
     return texts
 
 
-def compute_score_ppl(solution_str, ground_truth, retrieval=True, generation=True):
+def check_answer_correct(answer, golden_answers):
+    answer_context_score = answer_span_check(
+        prediction=answer,
+        golden_answers=golden_answers
+    )
+    if answer_context_score == 0:
+        answer_context_score = 1 if check_if_response_is_correct_llm(
+            response=answer,
+            gold_answers=golden_answers
+        ) else 0
+    return answer_context_score
+
+
+def compute_score_rag(solution_str, ground_truth, zeroshot_answers):
     """
-    compute perplexity score, and return as the reward
+    Args:
+        solution_str: the solution text
+        ground_truth: the ground truth
+        zeroshot_answers: dictionary containing cached zeroshot answers
     """
-    highest_ppl_score = 0
+    
+    utility_score = 0
+    generation_score = 0
     
     question = ground_truth['question']
     golden_answers = ground_truth['target'].tolist()
-
+    
     searched_texts = extract_texts(solution_str=solution_str)
     titles = extract_titles(solution_str=solution_str)
-    
+        
     context_with_info = ""
     for i, text in enumerate(searched_texts):
         context_with_info += f"Doc {i+1} (Title: {titles[i]})\n{text}\n\n"
+        
+    answer_context = generate_answer(prompt=question, context=context_with_info)
+    answer_context_score = check_answer_correct(answer=answer_context, golden_answers=golden_answers)
+        
+    if question in zeroshot_answers:
+        answer_zeroshot = zeroshot_answers[question]['answer']
+        answer_zeroshot_score = zeroshot_answers[question]['score']
+    else:
+        answer_zeroshot = generate_answer_zero_shot(prompt=question)
+        answer_zeroshot_score = check_answer_correct(answer=answer_zeroshot, golden_answers=golden_answers)
+        
+    utility_score = answer_context_score - answer_zeroshot_score
+    generation_score = answer_context_score
     
-    for answer in golden_answers:
-        retrieval_score = compute_retrieval_utility_score(
-            prompt=question,
-            answer=answer,
-            context=context_with_info,
-            num_runs=6
-        )
-        if retrieval_score > highest_ppl_score:
-            highest_ppl_score = retrieval_score
-            
-        do_print = random.randint(1, 16) == 1
-        
-    generation_score = 0
-    generated_answer = None
-    if generation:
-        generated_answer = generate_answer(
-            prompt=question,
-            context=context_with_info
-        )
-        
-        if generated_answer is not None:
-            generation_score = 2.1 if answer_span_check(generated_answer, ground_truth['target']) else 0
+    score = utility_score + generation_score
+    
+    do_print = random.randint(1, 16) == 1
         
     if do_print:
         print(f"--------------------------------")
-        print(f"Question: {question}")
-        if generated_answer is not None:
-            print(f"Generated answer: {generated_answer}")
         print(f"Golden answers: {ground_truth['target']}")
+        print(f"Extracted answer: {answer_context}")
+        print(f"Extracted zeroshot answer: {answer_zeroshot}")
+        print(f"Answer context score: {answer_context_score}")
+        print(f"Answer zeroshot score: {answer_zeroshot_score}")
+        print(f"Utility score: {utility_score}")
+        print(f"Generation score: {generation_score}")
+        print(f"Extracted doc_info: {context_with_info}")
         print(f"Solution string: {solution_str}")
-        
-    retrieval_score = 0
-    if highest_ppl_score >= 0.9:
-        retrieval_score = 3
-    if highest_ppl_score >= 0.8:
-        retrieval_score = 2
-    elif highest_ppl_score >= 0.6:
-        retrieval_score = 1
-    elif highest_ppl_score >= 0.5:
-        retrieval_score = 0
-    elif highest_ppl_score >= 0.3:
-        retrieval_score = -1
-    else:
-        retrieval_score = -3
-        
-        
-    return retrieval_score + generation_score
-            
-    # if highest_ppl_score >= 0.9:
-    #     return 5
-    # if highest_ppl_score >= 0.8:
-    #     return 4
-    # elif highest_ppl_score >= 0.6:
-    #     return 3
-    # elif highest_ppl_score >= 0.5:
-    #     return 1
-    # elif highest_ppl_score >= 0.4:
-    #     return 0
-    # elif highest_ppl_score >= 0.3:
-    #     return -1
-    # else:
-    #     return -3
     
+    return score, answer_zeroshot, answer_zeroshot_score
     

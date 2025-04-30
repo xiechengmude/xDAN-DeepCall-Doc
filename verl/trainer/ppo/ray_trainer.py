@@ -41,7 +41,8 @@ from verl.utils.seqlen_balancing import get_seqlen_balanced_partitions, log_seql
 
 import re
 # from search_c1.llm_agent.generation import LLMGenerationManager, GenerationConfig
-from search_c1.llm_agent.generation_perp import LLMGenerationManager, GenerationConfig
+# from search_c1.llm_agent.generation_perp import LLMGenerationManager, GenerationConfig
+from search_c1.llm_agent.generation_ug import LLMGenerationManager, GenerationConfig
 
 
 WorkerType = Type[Worker]
@@ -281,7 +282,7 @@ def compute_data_metrics(batch, use_critic=True):
     return metrics
 
 
-def compute_reward_metrics(batch):
+def compute_reward_metrics_retrieval(batch):
     reward_tensor = batch.batch['token_level_scores'].sum(-1)
 
     reward_metrics = {}
@@ -309,61 +310,83 @@ def compute_reward_metrics(batch):
     reward_metrics["reward/wrong_ratio"] = wrong_ratio.detach().item()
 
     return reward_metrics
-# def compute_reward_metrics(batch):
-#     reward_tensor = batch.batch['token_level_scores'].sum(-1)
 
-#     reward_metrics = {}
-#     reward_metrics["reward/mean"] = torch.mean(reward_tensor).detach().item()
 
-#     # Categorize rewards based on different score ranges
+def compute_reward_metrics_ppl(batch):
+    reward_tensor = batch.batch['token_level_scores'].sum(-1)
 
-#     answer_incorrect = (reward_tensor < 1)
-#     answer_correct = (reward_tensor >= 1)
-#     answer_correct_zeroshot_correct = (reward_tensor >= 1.0) & (reward_tensor <= 2.0)
-#     answer_correct_zeroshot_incorrect = (reward_tensor >= 2.0) & (reward_tensor <= 3.0)
-#     answer_incorrect_zeroshot_correct = (reward_tensor == -1)
+    reward_metrics = {}
+    reward_metrics["reward/mean"] = torch.mean(reward_tensor).detach().item()
+    
+    # Separate retrieval component from total reward
+    # For scores with generation (ending in .1), subtract 2.1 to get retrieval component
+    # For scores without generation, use the score directly
+    retrieval_component = torch.where(
+        torch.abs(reward_tensor - torch.floor(reward_tensor)) > 0.05,  # has generation component
+        reward_tensor - 2.1,  # subtract generation score
+        reward_tensor  # use score directly
+    )
+    
+    # Calculate retrieval win ratios based on retrieval component only
+    # For 90% win ratio (retrieval score >= 3.0)
+    ninety_recall = torch.sum(retrieval_component >= 2.9).float() / reward_tensor.numel()
+    reward_metrics["reward/90_win_ratio"] = ninety_recall.detach().item()
+    
+    # For 80% win ratio (retrieval score >= 2.0)
+    eighty_recall = torch.sum(retrieval_component >= 1.9).float() / reward_tensor.numel()
+    reward_metrics["reward/80_win_ratio"] = eighty_recall.detach().item()
+    
+    # For 60% win ratio (retrieval score >= 1.0)
+    sixty_recall = torch.sum(retrieval_component >= 0.9).float() / reward_tensor.numel()
+    reward_metrics["reward/60_win_ratio"] = sixty_recall.detach().item()
+    
+    # For 50% win ratio (retrieval score >= 0.0)
+    fifty_recall = torch.sum(retrieval_component >= -0.1).float() / reward_tensor.numel()
+    reward_metrics["reward/50_win_ratio"] = fifty_recall.detach().item()
+    
+    # For 40% win ratio (retrieval score >= -1.0)
+    forty_recall = torch.sum(retrieval_component >= -1.1).float() / reward_tensor.numel()
+    reward_metrics["reward/40_win_ratio"] = forty_recall.detach().item()
+    
+    # For 30% win ratio (retrieval score >= -3.0)
+    thirty_recall = torch.sum(retrieval_component >= -3.1).float() / reward_tensor.numel()
+    reward_metrics["reward/30_win_ratio"] = thirty_recall.detach().item()
+    
+    # Calculate generation success rate
+    # Check if reward has the ".1" part (indicating generation success)
+    generation_success = torch.sum(torch.abs(reward_tensor - torch.floor(reward_tensor)) > 0.05).float() / reward_tensor.numel()
+    reward_metrics["reward/generation_success_rate"] = generation_success.detach().item()
+    
+    # Calculate wrong ratio (retrieval score == -3.0)
+    wrong_ratio = torch.sum(retrieval_component == -3.0).float() / reward_tensor.numel()
+    reward_metrics["reward/retrieval_wrong_ratio"] = wrong_ratio.detach().item()
 
-#     # Calculate means for different components
-#     reward_metrics["reward/answer_incorrect_ratio"] = torch.sum(answer_incorrect).float() / reward_tensor.numel()
-#     reward_metrics["reward/answer_correct_ratio"] = torch.sum(answer_correct).float() / reward_tensor.numel()
-#     reward_metrics["reward/answer_correct_zeroshot_correct_ratio"] = torch.sum(answer_correct_zeroshot_correct).float() / reward_tensor.numel()
-#     reward_metrics["reward/answer_correct_zeroshot_incorrect_ratio"] = torch.sum(answer_correct_zeroshot_incorrect).float() / reward_tensor.numel()
-#     reward_metrics["reward/answer_incorrect_zeroshot_correct_ratio"] = torch.sum(answer_incorrect_zeroshot_correct).float() / reward_tensor.numel()
+    return reward_metrics
 
-#     return reward_metrics
 
-# def compute_reward_metrics(batch):
-#     reward_tensor = batch.batch['token_level_scores'].sum(-1)
+def compute_reward_metrics_rag(batch):
+    reward_tensor = batch.batch['token_level_scores'].sum(-1)
 
-#     reward_metrics = {}
-#     reward_metrics["reward/mean"] = torch.mean(reward_tensor).detach().item()
+    reward_metrics = {}
+    reward_metrics["reward/mean"] = torch.mean(reward_tensor).detach().item()
+    
+    # Calculate perfect answer ratio (reward == 2)
+    perfect_ratio = torch.sum(reward_tensor == 2).float() / reward_tensor.numel()
+    reward_metrics["reward/utility_1_gen_1"] = perfect_ratio.detach().item()
+    
+    # Calculate partial success ratio (reward == 1)
+    partial_ratio = torch.sum(reward_tensor == 1).float() / reward_tensor.numel()
+    reward_metrics["reward/utility_0_gen_1"] = partial_ratio.detach().item()
+    
+    # Calculate failure ratio (reward == 0)
+    fair_ratio = torch.sum(reward_tensor == 0).float() / reward_tensor.numel()
+    reward_metrics["reward/utility_0_gen_0"] = fair_ratio.detach().item()
+    
+    fair_ratio = torch.sum(reward_tensor == -1).float() / reward_tensor.numel()
+    reward_metrics["reward/utility_-1_gen_0"] = fair_ratio.detach().item()
+    
 
-#     # Separate answer and retrieval components correctly
-#     answer_component = (reward_tensor >= 1.0).float()
-#     retrieval_component = torch.where(
-#         reward_tensor >= 1.0,
-#         reward_tensor - 1.0,
-#         reward_tensor
-#     )
-
-#     reward_metrics["reward/answer_component_mean"] = torch.mean(answer_component).detach().item()
-#     reward_metrics["reward/retrieval_component_mean"] = torch.mean(retrieval_component).detach().item()
-
-#     # Additional stats
-#     fully_correct = torch.sum((answer_component == 1) & (retrieval_component >= 0.2)).float() / reward_tensor.numel()
-#     reward_metrics["reward/full_correct_ratio"] = fully_correct.detach().item()
-
-#     only_answer_correct = torch.sum((answer_component == 1) & (retrieval_component < 0.1)).float() / reward_tensor.numel()
-#     reward_metrics["reward/only_answer_correct_ratio"] = only_answer_correct.detach().item()
-
-#     only_retrieval_correct = torch.sum((answer_component == 0) & (retrieval_component >= 0.2)).float() / reward_tensor.numel()
-#     reward_metrics["reward/only_retrieval_correct_ratio"] = only_retrieval_correct.detach().item()
-
-#     neither_correct = torch.sum((answer_component == 0) & (retrieval_component < 0.1)).float() / reward_tensor.numel()
-#     reward_metrics["reward/neither_correct_ratio"] = neither_correct.detach().item()
-
-#     return reward_metrics
-
+    return reward_metrics
 
 
 def compute_timing_metrics(batch, timing_raw):
@@ -913,7 +936,7 @@ class RayPPOTrainer(object):
                         metrics.update(actor_output_metrics)
                         
                         
-                    reward_metrics = compute_reward_metrics(batch)
+                    reward_metrics = compute_reward_metrics_rag(batch)
                     metrics.update(reward_metrics)
 
                     # validate

@@ -462,7 +462,7 @@ class LLMGenerationManager:
         """
         Execute predictions and generate external LLM feedback for Search-C1.
         """
-        cur_actions, contents, search_complete_flags = self.postprocess_predictions(predictions)
+        cur_actions, contents, search_complete_flags, important_doc_ids = self.postprocess_predictions(predictions)
         next_obs, dones, valid_action, is_search = [], [], [], []
         
         # Track conversation history for each active example
@@ -478,52 +478,33 @@ class LLMGenerationManager:
             print("No search queries or no search is allowed")
             search_results = [''] * sum([1 for action in cur_actions if action == 'search'])
 
-        for i, (action, search_complete, active) in enumerate(zip(cur_actions, search_complete_flags, active_mask)):
-            # print(i, action, search_complete, active)
+        search_result_counter = 0
+        for i, (action, search_complete, active, doc_ids) in enumerate(zip(cur_actions, search_complete_flags, active_mask, important_doc_ids)):
             if not active and do_search:
                 next_obs.append('')
                 dones.append(True)
                 valid_action.append(0)
                 is_search.append(0)
             elif not active and not do_search:
-                # final_answer, zero_shot_answer = self._generate_final_answer(
-                #     self.original_questions[i], 
-                #     self.conversation_histories[i]
-                # )
-                
-                # # Store in conversation history
-                # self.conversation_histories[i] += f"\nFinal answer: {final_answer}\n"
-                
-                # # CHANGE: Include the answer in the observation
-                # next_obs.append(f'\n\n<answer>{final_answer}</answer>\n\n<zeroshot_answer>{zero_shot_answer}</zeroshot_answer>\n\n')
                 next_obs.append('')
                 dones.append(True)
                 valid_action.append(1)
                 is_search.append(0)
             else:
                 if action == 'search_complete' or not do_search:
-                    # Generate final answer using the external LLM
-                    # final_answer, zero_shot_answer = self._generate_final_answer(
-                    #     self.original_questions[i], 
-                    #     self.conversation_histories[i]
-                    # )
-                    
-                    # # Store in conversation history
-                    # self.conversation_histories[i] += f"\nSearch complete. Final answer: {final_answer}\n"
-                    
-                    # # Include the answer in the observation
-                    # next_obs.append(f'\n\n<answer>{final_answer}</answer>\n\n<zeroshot_answer>{zero_shot_answer}</zeroshot_answer>\n\n')
                     next_obs.append('')
                     dones.append(True)
                     valid_action.append(1)
                     is_search.append(0)
-                    
                 elif action == 'search':
-                    # Execute search
-                    # Execute search
                     if do_search:
-                        search_result = search_results.pop(0).strip()
+                        search_result = search_results[search_result_counter].strip()
+                        search_result_counter += 1
 
+                        # Add important document IDs to conversation history
+                        if doc_ids:
+                            self.conversation_histories[i] += f"\nImportant documents: {doc_ids}\n"
+                        
                         self.conversation_histories[i] += f"\nQuery: {contents[i]}\nSearch results: {search_result}"
                         
                         # Always include information tags
@@ -532,32 +513,15 @@ class LLMGenerationManager:
                         dones.append(False)  # Always continue here, let the copilot decide in the next turn
                         valid_action.append(1)
                         is_search.append(1)
-
                     else:
-                        # This should generate a final answer when max iterations is reached
-                        # final_answer, zero_shot_answer = self._generate_final_answer(
-                        #     self.original_questions[i], 
-                        #     self.conversation_histories[i]
-                        # )
-                        
-                        # # Store in conversation history
-                        # self.conversation_histories[i] += f"\nMax iterations reached. Final answer: {final_answer}\n"
-                        
-                        # # Include the answer in the observation
-                        # next_obs.append(f'\n\n<answer>{final_answer}</answer>\n\n<zeroshot_answer>{zero_shot_answer}</zeroshot_answer>\n\n')
                         next_obs.append('')
                         dones.append(True)
                         valid_action.append(1)
                         is_search.append(0)
-                    
                 else:
                     # Invalid action
                     feedback = "My previous action is invalid. I should put my search query between <query> and </query> tags in JSON format. Let me try again."
                     next_obs.append(f'\n<feedback>{feedback}</feedback>\n')
-                    
-                    # Update conversation history
-                    # self.conversation_histories[i] += f"\nInvalid action\nFeedback: {feedback}"
-                    
                     dones.append(False)
                     valid_action.append(0)
                     is_search.append(0)
@@ -706,19 +670,35 @@ class LLMGenerationManager:
         
         return final_answer, final_answer_zero_shot
         
-    def postprocess_predictions(self, predictions: List[Any]) -> Tuple[List[str], List[str]]:
+    def postprocess_predictions(self, predictions: List[Any]) -> Tuple[List[str], List[str], List[bool], List[List[int]]]:
         """
         Process predictions to extract actions and content.
+        Returns:
+            Tuple of (actions, contents, search_complete_flags, important_doc_ids)
         """
         actions = []
         contents = []
         search_complete_flags = []
+        important_doc_ids = []
                 
         for prediction in predictions:
             if isinstance(prediction, str): # for llm output
                 # Extract search queries
                 search_complete_match = re.search(r'<search_complete>(.*?)</search_complete>', prediction, re.DOTALL)
                 query_match = re.search(r'<query>(.*?)</query>', prediction, re.DOTALL)
+                important_info_match = re.search(r'<important_info>(.*?)</important_info>', prediction, re.DOTALL)
+                
+                # Parse important document IDs
+                doc_ids = []
+                if important_info_match:
+                    try:
+                        import json
+                        doc_ids = json.loads(important_info_match.group(1).strip())
+                        if not isinstance(doc_ids, list):
+                            doc_ids = []
+                    except:
+                        doc_ids = []
+                important_doc_ids.append(doc_ids)
                 
                 if query_match:
                     query_text = query_match.group(1).strip()
@@ -749,17 +729,16 @@ class LLMGenerationManager:
                 else:
                     content = ''
                     action = None
-                
+                    
+                # Check for search completion flag
                 search_complete = False
                 if search_complete_match:
-                    # Check if search is complete
                     complete_text = search_complete_match.group(1).strip().lower()
-                    search_complete = complete_text == "true" or complete_text == "yes" or complete_text == "1"
+                    search_complete = complete_text == "true" or complete_text == "yes" or complete_text == "1" or complete_text == "y"
                     if search_complete:
                         content = ""
                         action = "search_complete"
                 
-                                
                 actions.append(action)
                 contents.append(content)
                 search_complete_flags.append(search_complete)
@@ -767,8 +746,9 @@ class LLMGenerationManager:
                 actions.append(None)
                 contents.append('')
                 search_complete_flags.append(False)
+                important_doc_ids.append([])
             
-        return actions, contents, search_complete_flags
+        return actions, contents, search_complete_flags, important_doc_ids
     
 
     def _compose_final_output(self, left_side: Dict,

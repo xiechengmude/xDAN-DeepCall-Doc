@@ -17,15 +17,24 @@ Note that we don't combine the main with ray_trainer as ray_trainer is used by o
 
 from verl import DataProto
 import torch
-from verl.utils.reward_score import rag, ppl
+# from verl.utils.reward_score import rag, ppl, rag_new
+# from verl.utils.reward_score import rag_new
+from verl.utils.reward_score import rag_2
+
 from verl.trainer.ppo.ray_trainer import RayPPOTrainer
 import re
+import os
+import json
 import numpy as np
+import threading
+import random
+
+zeroshot_cache_file = "data/nq_hotpotqa_zeroshot_qwen3_13b/zeroshot_answers.json"
 
 def _select_rm_score_fn(data_source):
     if data_source in ['nq', 'triviaqa', 'popqa', 'hotpotqa', '2wikimultihopqa', 'musique', 'bamboogle']:
         # return rag.compute_score_rag
-        return ppl.compute_score_ppl
+        return rag_2.compute_score_rag
     else:
         raise NotImplementedError
 
@@ -38,6 +47,12 @@ class RewardManager():
         self.tokenizer = tokenizer
         self.num_examine = num_examine  # the number of batches of decoded responses to print to the console
         self.format_score = format_score
+        self.zeroshot_lock = threading.Lock()
+        
+        if os.path.exists(zeroshot_cache_file):
+            self.zeroshot_answers = json.load(open(zeroshot_cache_file))
+        else:
+            self.zeroshot_answers = {}
 
     def __call__(self, data: DataProto):
         """We will expand this function gradually based on the available datasets"""
@@ -48,17 +63,13 @@ class RewardManager():
 
         reward_tensor = torch.zeros_like(data.batch['responses'], dtype=torch.float32)
 
-        # all_scores = []
-
         already_print_data_sources = {}
 
         for i in range(len(data)):
             data_item = data[i]  # DataProtoItem
 
             prompt_ids = data_item.batch['prompts']
-
             prompt_length = prompt_ids.shape[-1]
-
             valid_prompt_length = data_item.batch['attention_mask'][:prompt_length].sum()
             valid_prompt_ids = prompt_ids[-valid_prompt_length:]
 
@@ -76,10 +87,29 @@ class RewardManager():
             data_source = data_item.non_tensor_batch['data_source']
             compute_score_fn = _select_rm_score_fn(data_source)
 
-            # score = compute_score_fn(solution_str=sequences_str, ground_truth=ground_truth, format_score=self.format_score)
-            score = compute_score_fn(solution_str=sequences_str, ground_truth=ground_truth)
+            # Get scores and zeroshot info
+            score, answer_zeroshot, answer_zeroshot_score = compute_score_fn(
+                solution_str=sequences_str, 
+                ground_truth=ground_truth, 
+                zeroshot_answers=self.zeroshot_answers
+            )
+            
+            # Safely update zeroshot answers if needed
+            question = ground_truth['question']
+            if question not in self.zeroshot_answers:
+                with self.zeroshot_lock:
+                    # Double check after acquiring lock
+                    if question not in self.zeroshot_answers:
+                        self.zeroshot_answers[question] = {
+                            'answer': answer_zeroshot,
+                            'score': answer_zeroshot_score
+                        }
+                        # Save to file periodically
+                        if random.random() < 0.01:  # Save 1% of the time
+                            with open(zeroshot_cache_file, 'w') as f:
+                                json.dump(self.zeroshot_answers, f)
+
             reward_tensor[i, valid_response_length - 1] = score
-            # all_scores.append(score)
 
             if data_source not in already_print_data_sources:
                 already_print_data_sources[data_source] = 0
@@ -87,13 +117,6 @@ class RewardManager():
             if already_print_data_sources[data_source] < self.num_examine:
                 already_print_data_sources[data_source] += 1
                 print(sequences_str)
-        
-        # print(f"[DEBUG] all_scores: {all_scores}")
-        # print(f"[DEBUG] all_scores shape: {np.array(all_scores).shape}")
-        # print(f"[DEBUG] all_scores mean: {np.mean(all_scores)}")
-        # print(f"[DEBUG] all_scores max: {np.max(all_scores)}")
-        # print(f"[DEBUG] all_scores min: {np.min(all_scores)}")
-        # print(f"[DEBUG] all_scores std: {np.std(all_scores)}")
 
         return reward_tensor
 
