@@ -16,7 +16,7 @@ import re
 import string
 import random
 from pyserini.eval.evaluate_dpr_retrieval import has_answers, SimpleTokenizer
-from generator_llms.local import *
+from generator_llms.local_api import *
 
 _tokenizer = SimpleTokenizer()
 

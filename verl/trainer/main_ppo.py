@@ -29,7 +29,7 @@ import numpy as np
 import threading
 import random
 
-zeroshot_cache_file = "data/nq_hotpotqa_zeroshot_qwen3_13b/zeroshot_answers.json"
+zeroshot_cache_file = "data/nq_hotpotqa_zeroshot_qwen3_13b/zeroshot_answers_.json"
 
 def _select_rm_score_fn(data_source):
     if data_source in ['nq', 'triviaqa', 'popqa', 'hotpotqa', '2wikimultihopqa', 'musique', 'bamboogle']:
