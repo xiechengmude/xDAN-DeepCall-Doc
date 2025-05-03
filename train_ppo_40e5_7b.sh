@@ -60,7 +60,7 @@ PYTHONUNBUFFERED=1 python3 -m verl.trainer.main_ppo \
     trainer.default_hdfs_dir=null \
     trainer.default_local_dir=verl_checkpoints/$EXPERIMENT_NAME \
     max_turns=4 \
-    +generator_llm="claude-3" \
+    +generator_llm="Qwen/Qwen2.5-7B-Instruct-GPTQ-Int4" \
     retriever.url="http://127.0.0.1:7000/retrieve" \
     retriever.topk=3 \
     2>&1 | tee $EXPERIMENT_NAME.log

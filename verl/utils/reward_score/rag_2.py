@@ -16,7 +16,7 @@ import re
 import string
 import random
 from pyserini.eval.evaluate_dpr_retrieval import has_answers, SimpleTokenizer
-from generator_llms.local_api import *
+from generator_llms.local_inst import *
 
 _tokenizer = SimpleTokenizer()
 
@@ -177,7 +177,7 @@ def check_answer_correct(answer, golden_answers):
     return answer_context_score
 
 
-def compute_score_rag(solution_str, ground_truth, zeroshot_answers):
+def compute_score_rag(solution_str, ground_truth, zeroshot_answers, use_generation_score=True):
     """
     Args:
         solution_str: the solution text
@@ -192,7 +192,7 @@ def compute_score_rag(solution_str, ground_truth, zeroshot_answers):
     golden_answers = ground_truth['target'].tolist()
     
     # Get documents with titles, handling important documents
-    response_str = solution_str.split("Assistant: Let me solve this step by step.")[1]
+    response_str = solution_str.split("Now, start the loop with the following question:")[1]
     docs = extract_titles_and_texts(solution_str=response_str)
     
     # Build context with unique documents
@@ -211,7 +211,8 @@ def compute_score_rag(solution_str, ground_truth, zeroshot_answers):
         
     if question in zeroshot_answers:
         answer_zeroshot = zeroshot_answers[question]['answer']
-        answer_zeroshot_score = zeroshot_answers[question]['score']
+        # answer_zeroshot_score = zeroshot_answers[question]['score']
+        answer_zeroshot_score = check_answer_correct(answer=answer_zeroshot, golden_answers=golden_answers)
     else:
         answer_zeroshot = generate_answer_zero_shot(prompt=question)
         answer_zeroshot_score = check_answer_correct(answer=answer_zeroshot, golden_answers=golden_answers)
@@ -219,7 +220,10 @@ def compute_score_rag(solution_str, ground_truth, zeroshot_answers):
     utility_score = answer_context_score - answer_zeroshot_score
     generation_score = answer_context_score
     
-    score = utility_score + generation_score
+    if use_generation_score:
+        score = utility_score + generation_score
+    else:
+        score = utility_score
     
     do_print = random.randint(1, 16) == 1
         

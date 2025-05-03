@@ -1,10 +1,52 @@
 import unittest
-from generator_llms import local_api
+# from generator_llms import local_api
+# from generator_llms import local as local_api
+from generator_llms import local_inst as local_api
 
 class TestLocalAPI(unittest.TestCase):
     def test_generate_answer(self):
         print("\n=== Testing generate_answer with context ===")
-        context = "The capital of France is Paris. The capital of Germany is Berlin."
+        context = """The capital of France is Paris. The capital of Germany is Berlin.
+Some irrelevant information: The sky is blue, water is wet, and 2+2=4.
+The capital of Italy is Rome, but that's not relevant to this question.
+The Eiffel Tower is in Paris, which is a famous landmark.
+The capital of Spain is Madrid, but we're not asking about Spain."""
+        question = "What is the capital of France?"
+        print(f"Context: {context}")
+        print(f"Question: {question}")
+        answer = local_api.generate_answer(context, question)
+        print(f"Answer: {answer}")
+        self.assertIsInstance(answer, str)
+        self.assertGreater(len(answer), 0)
+        self.assertIn("Paris", answer)
+
+    def test_generate_answer_complex(self):
+        print("\n=== Testing generate_answer with complex context ===")
+        context = """In 2023, Paris hosted the Olympic Games. The city is known for its art and culture.
+Berlin, on the other hand, is famous for its nightlife and history.
+The capital of France is Paris, which is located in Europe.
+The capital of Germany is Berlin, which is also in Europe.
+Some random facts: The moon orbits Earth, the sun is hot, and computers use electricity.
+The Louvre Museum is in Paris, which houses the Mona Lisa.
+The Brandenburg Gate is in Berlin, which is a famous landmark.
+The Seine River flows through Paris, while the Spree River flows through Berlin."""
+        question = "What is the capital of France?"
+        print(f"Context: {context}")
+        print(f"Question: {question}")
+        answer = local_api.generate_answer(context, question)
+        print(f"Answer: {answer}")
+        self.assertIsInstance(answer, str)
+        self.assertGreater(len(answer), 0)
+        self.assertIn("Paris", answer)
+
+    def test_generate_answer_contradictory(self):
+        print("\n=== Testing generate_answer with contradictory context ===")
+        context = """The capital of France is Paris. However, some people mistakenly believe it's Lyon.
+The capital of Germany is Berlin, but there's a common misconception that it's Munich.
+Paris is the largest city in France, while Berlin is the largest in Germany.
+Some incorrect information: The capital of France is Marseille, which is false.
+The Eiffel Tower is located in Paris, which is the correct capital.
+The capital of Spain is Madrid, which is unrelated to this question."""
         question = "What is the capital of France?"
         print(f"Context: {context}")
         print(f"Question: {question}")
@@ -23,30 +65,6 @@ class TestLocalAPI(unittest.TestCase):
         self.assertIsInstance(answer, str)
         self.assertGreater(len(answer), 0)
         self.assertIn("Paris", answer)
-
-    def test_format_qa_prompt(self):
-        print("\n=== Testing format_qa_prompt ===")
-        context = "Test context"
-        question = "Test question"
-        print(f"Original context: {context}")
-        print(f"Original question: {question}")
-        formatted_context, formatted_prompt = local_api.format_qa_prompt(question, context)
-        print(f"Formatted context: {formatted_context}")
-        print(f"Formatted prompt: {formatted_prompt}")
-        self.assertIn("Contexts:", formatted_context)
-        self.assertIn(context, formatted_context)
-        self.assertIn("Question:", formatted_prompt)
-        self.assertIn(question, formatted_prompt)
-
-    def test_format_zero_shot_prompt(self):
-        print("\n=== Testing format_zero_shot_prompt ===")
-        question = "Test question"
-        print(f"Original question: {question}")
-        formatted_prompt = local_api.format_zero_shot_prompt(question)
-        print(f"Formatted prompt: {formatted_prompt}")
-        self.assertIn("Question:", formatted_prompt)
-        self.assertIn(question, formatted_prompt)
-        self.assertIn("Important:", formatted_prompt)
 
     def test_call_llm(self):
         print("\n=== Testing call_llm ===")

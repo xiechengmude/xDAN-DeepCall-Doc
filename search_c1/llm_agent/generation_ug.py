@@ -24,7 +24,7 @@ class GenerationConfig:
     answer_prompt_file: str = "prompts/answer_prompt.txt"  # Path to answer prompt template
     zero_shot_prompt_file: str = "prompts/zero_shot_prompt.txt"  # Path to zero-shot prompt template
     zero_shot_store_file: str = "data/nq_hotpotqa_zeroshot_claude3/zeroshot_answers.json"
-    generator_llm: str = "claude-3.5"  # Which LLM to use for generation ("claude-3.5", "claude-3   ", "gpt-3.5", "gpt-4o-mini", "gpt-4o")
+    generator_llm: str = "Qwen/Qwen2.5-7B-Instruct-GPTQ-Int4"
 
 class LLMGenerationManager:
     """
@@ -62,16 +62,6 @@ class LLMGenerationManager:
             max_start_length=config.max_start_length
         ))
         
-        # Import external LLM modules
-        try:
-            from generator_llms import get_claude_response, gpt_chat_35_msg, gpt_chat_4omini, gpt_chat_4o
-            self.get_claude_response = get_claude_response
-            self.gpt_chat_35_msg = gpt_chat_35_msg
-            self.gpt_chat_4omini = gpt_chat_4omini
-            self.gpt_chat_4o = gpt_chat_4o
-        except ImportError:
-            print("Warning: generator_llms module not found. Using mock LLM responses.")
-            raise ImportError("generator_llms module not found.")
 
     def _load_zeroshot_answers(self, filename):
         """Load zeroshot answers from file."""
@@ -529,61 +519,6 @@ class LLMGenerationManager:
         return next_obs, dones, valid_action, is_search
     
     
-    def _generate_feedback(self, original_question: str, query: str, search_result: str, conversation_history: str = "") -> str:
-        """
-        Generate feedback based on search results using an external LLM.
-        
-        Args:
-            query: The search query
-            search_result: The search results
-            conversation_history: The conversation history between search copilot and generator LLM
-            
-        Returns:
-            Generated feedback
-        """
-        # Format the prompt with the actual values
-        prompt = self.feedback_prompt.format(
-            original_question=original_question,
-            query=query,
-            search_results=search_result,
-            conversation_history=conversation_history
-        )
-        
-        max_length = 30
-        
-        # Call the appropriate external LLM based on configuration
-        if self.config.generator_llm == "claude-3.5":
-            feedback = self.get_claude_response(prompt, llm='sonnet', max_tokens=max_length)
-        elif self.config.generator_llm == "claude-3":
-            feedback = self.get_claude_response(prompt, llm='haiku', max_tokens=max_length)
-        elif self.config.generator_llm == "gpt-3.5":
-            feedback = self.gpt_chat_35_msg(prompt, max_tokens=max_length)
-        elif self.config.generator_llm == "gpt-4o-mini":
-            feedback = self.gpt_chat_4omini(prompt, max_tokens=max_length)
-        elif self.config.generator_llm == "gpt-4o":
-            feedback = self.gpt_chat_4o(prompt, max_tokens=max_length)
-        else:
-            # Default to simple feedback if no valid LLM is specified
-            print("[Warning] No valid LLM is specified. Using simple feedback.")
-            feedback = self._generate_simple_feedback(query, search_result)
-            
-        return feedback
-    
-    def _generate_simple_feedback(self, query: str, search_result: str) -> str:
-        """
-        Generate simple feedback for testing without external LLM calls.
-        This is a fallback for when external LLMs are not available.
-        """
-        # Check if search result is empty
-        if not search_result or search_result.strip() == "":
-            return "Your search returned no results. Try to reformulate your query with more specific terms."
-        
-        # Check if the search result is substantive
-        if len(search_result.split()) < 10:
-            return "The search results are very limited. Consider trying different search terms or being more specific."
-        
-        # Default positive feedback
-        return "The search results contain relevant information. Consider refining your query further if you need more specific details."
     
     def _check_feedback_for_stop(self, feedback: str) -> bool:
         """
@@ -613,62 +548,6 @@ class LLMGenerationManager:
                 
         return False
     
-    def _generate_final_answer(self, original_question: str, conversation_history: str = "") -> str:
-        """
-        Generate final answer based on search results using an external LLM.
-        
-        Args:
-            original_question: The original question
-            conversation_history: The conversation history between search copilot and generator LLM
-            
-        Returns:
-            answer string
-        """
-        # Format the prompt with the actual values
-        prompt = self.answer_prompt.format(
-            question=original_question,
-            conversation_history=conversation_history
-        )
-        
-        prompt_zero_shot = self.zero_shot_prompt.format(
-            question=original_question,
-        )
-        
-        max_length = 30
-        
-        if original_question not in self.zeroshot_answers:
-            self.save_zeroshot_flag = True
-        
-        # Call the appropriate external LLM based on configuration
-        if self.config.generator_llm == "claude-3.5":
-            answer = self.get_claude_response(prompt, llm='sonnet', max_tokens=max_length)
-            answer_zero_shot = self.get_claude_response(prompt_zero_shot, llm='sonnet', max_tokens=max_length) if original_question not in self.zeroshot_answers else self.zeroshot_answers[original_question]
-        elif self.config.generator_llm == "claude-3":
-            answer = self.get_claude_response(prompt, llm='haiku', max_tokens=max_length)
-            answer_zero_shot = self.get_claude_response(prompt_zero_shot, llm='haiku', max_tokens=max_length) if original_question not in self.zeroshot_answers else self.zeroshot_answers[original_question]
-        elif self.config.generator_llm == "gpt-3.5":
-            answer = self.gpt_chat_35_msg(prompt, max_tokens=max_length)
-            answer_zero_shot = self.gpt_chat_35_msg(prompt_zero_shot, max_tokens=max_length) if original_question not in self.zeroshot_answers else self.zeroshot_answers[original_question]
-        elif self.config.generator_llm == "gpt-4o-mini":
-            answer = self.gpt_chat_4omini(prompt, max_tokens=max_length)
-            answer_zero_shot = self.gpt_chat_4omini(prompt_zero_shot, max_tokens=max_length) if original_question not in self.zeroshot_answers else self.zeroshot_answers[original_question]
-        elif self.config.generator_llm == "gpt-4o":
-            answer = self.gpt_chat_4o(prompt, max_tokens=max_length)
-            answer_zero_shot = self.gpt_chat_4o(prompt_zero_shot, max_tokens=max_length) if original_question not in self.zeroshot_answers else self.zeroshot_answers[original_question]
-        else:
-            raise ValueError(f"Invalid generator LLM: {self.config.generator_llm}")
-
-        # Extract content between <answer> and </answer> tags
-        # match = re.search(r"<answer>(.*?)</answer>", answer, re.DOTALL)
-        # if match:
-        #     final_answer = match.group(1).strip()
-        # else:
-        #     print("No valid <answer>...</answer> tags found in the LLM response, use the whole response as the answer.")
-        final_answer = answer.strip()
-        final_answer_zero_shot = answer_zero_shot.strip()
-        self.zeroshot_answers[original_question] = final_answer_zero_shot
-        
-        return final_answer, final_answer_zero_shot
         
     def postprocess_predictions(self, predictions: List[Any]) -> Tuple[List[str], List[str], List[bool], List[List[int]]]:
         """
@@ -708,19 +587,29 @@ class LLMGenerationManager:
                         # Try to parse as JSON
                         import json
                         json_data = json.loads(query_text)
-                        if 'query' in json_data:
-                            content = json_data['query']
-                            if type(content) == list:
-                                content = content[0]
-                            elif type(content) == str:
-                                content = content
+                        try:
+                            if 'query' in json_data:
+                                try:
+                                    content = json_data['query']
+                                    if type(content) == list:
+                                        content = content[0]
+                                    elif type(content) == str:
+                                        content = content
+                                    else:
+                                        content = ''
+                                except:
+                                    print(f"Error in parsing query: {query_text}")
+                                    content = ''
+                                    
+                                action = "search"
                             else:
                                 content = ''
-                                
-                            action = "search"
-                        else:
+                                action = None
+                        except:
+                            print(f"Error in json parsing: {json_data}")
                             content = ''
                             action = None
+                            
                     except json.JSONDecodeError:
                         # Fallback to regex pattern for non-JSON format
                         content = ''
@@ -794,7 +683,8 @@ class LLMGenerationManager:
         try:
             results = self._batch_search(queries)['result']
         except Exception as e:
-            raise Exception(f"Error in batch_search: {e}, queries: {queries}")
+            print(f"Error in batch_search: {e}, queries: {queries}")
+            return ["Error"] * len(queries)
             
         
         return [self._passages2string(result) for result in results]

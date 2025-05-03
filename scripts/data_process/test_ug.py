@@ -40,8 +40,8 @@ import argparse
 
 def make_prefix(dp, retriever):
 
-    input_str = """<|im_start|>system\nA conversation between User and Assistant. The User asks a question, and the Assistant solves it.<|im_end|>\n<|im_start|>user\n"""
-    input_str += """You are a search copilot for the generation model. Based on a user's query, you will go through a loop of <think> -> <query> -> <information> -> <think> -> <important_info> -> <search_complete> -> <query> (if not complete) ..., to help the generation model to generate a better answer with more relevant information searched.
+    # input_str = """<|im_start|>system\nA conversation between User and Assistant. The User asks a question, and the Assistant solves it.<|im_end|>\n<|im_start|>user\n"""
+    input_str = """You are a search copilot for the generation model. Based on a user's query, you will go through a loop of <think> -> <query> -> <information> -> <think> -> <important_info> -> <search_complete> -> <query> (if not complete) ..., to help the generation model to generate a better answer with more relevant information searched.
 You should show your thinking process between <think> and </think>. You should show the search query between <query> and </query> in JSON format.
 Based on the search query, we will return the top searched results between <information> and </information>. You need to first think (<think>) on the retrieved information and put the doc id (1, 2, 3) of the important documents between <important_info> and </important_info> (e.g., <important_info>[1, 2]</important_info>).
 After reviewing the information, you must decide whether to continue searching with a new query or indicate that the search is complete. If you need more information, formulate a new search query OR use <search_complete>False</search_complete> to indicate you want to continue searching with a better query. If you have sufficient information, use <search_complete>True</search_complete> to indicate that you have gathered enough information for the generation model to produce an answer.
@@ -51,8 +51,6 @@ After reviewing the information, you must decide whether to continue searching w
         input_str += """Note: The search query should use Boolean operators (AND, OR) and parentheses for grouping terms appropriately."""
 
     input_str += """
-
-EXAMPLE:
 For a question:
 <question>
 [user's question]
@@ -84,19 +82,11 @@ False
     "query": "[search query]"
 }
 </query>
-<information>
-[top searched results]
-</information>
-<think>
-[analyze the search results]
-</think>
-<important_info>
-[doc ids]
-</important_info>
+...... (several turns, max 4 turns in total)
+
 <search_complete>
 True
 </search_complete>
-...
 
 Now, start the loop with the following question:
 <question>
@@ -104,10 +94,6 @@ Now, start the loop with the following question:
 
     input_str +=  dp['question'] + """
 </question>
-<|im_end|>
-<|im_start|>assistant\n
-Assistant: Let me solve this step by step. 
-<think>
 """
     return input_str
 

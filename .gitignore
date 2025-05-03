@@ -129,3 +129,5 @@ data
 play.ipynb
 
 verl_checkpoints
+
+*.gguf

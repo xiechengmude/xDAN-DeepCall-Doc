@@ -29,7 +29,6 @@ import numpy as np
 import threading
 import random
 
-zeroshot_cache_file = "data/nq_hotpotqa_zeroshot_qwen3_13b/zeroshot_answers_.json"
 
 def _select_rm_score_fn(data_source):
     if data_source in ['nq', 'triviaqa', 'popqa', 'hotpotqa', '2wikimultihopqa', 'musique', 'bamboogle']:
@@ -43,15 +42,17 @@ class RewardManager():
     """The reward manager.
     """
 
-    def __init__(self, tokenizer, num_examine, format_score=0.) -> None:
+    def __init__(self, tokenizer, num_examine, format_score=0., zeroshot_cache_file="data/Qwen/Qwen2.5-7B-Instruct-GPTQ-Int4/zeroshot_answers_.json") -> None:
         self.tokenizer = tokenizer
         self.num_examine = num_examine  # the number of batches of decoded responses to print to the console
         self.format_score = format_score
+        self.zeroshot_cache_file = zeroshot_cache_file
         self.zeroshot_lock = threading.Lock()
         
-        if os.path.exists(zeroshot_cache_file):
-            self.zeroshot_answers = json.load(open(zeroshot_cache_file))
+        if os.path.exists(self.zeroshot_cache_file):
+            self.zeroshot_answers = json.load(open(self.zeroshot_cache_file))
         else:
+            os.makedirs(os.path.dirname(self.zeroshot_cache_file), exist_ok=True)
             self.zeroshot_answers = {}
 
     def __call__(self, data: DataProto):
@@ -106,7 +107,17 @@ class RewardManager():
                         }
                         # Save to file periodically
                         if random.random() < 0.01:  # Save 1% of the time
-                            with open(zeroshot_cache_file, 'w') as f:
+                            with open(self.zeroshot_cache_file, 'w') as f:
+                                json.dump(self.zeroshot_answers, f)
+                                
+                    elif self.zeroshot_answers[question]['score'] != answer_zeroshot_score:
+                        self.zeroshot_answers[question] = {
+                            'answer': answer_zeroshot,
+                            'score': answer_zeroshot_score
+                        }
+                        # Save to file periodically
+                        if random.random() < 0.01:  # Save 1% of the time
+                            with open(self.zeroshot_cache_file, 'w') as f:
                                 json.dump(self.zeroshot_answers, f)
 
             reward_tensor[i, valid_response_length - 1] = score
@@ -204,10 +215,10 @@ def main_task(config):
         role_worker_mapping[Role.RewardModel] = ray.remote(RewardModelWorker)
         mapping[Role.RewardModel] = global_pool_id
 
-    reward_fn = RewardManager(tokenizer=tokenizer, num_examine=0)
+    reward_fn = RewardManager(tokenizer=tokenizer, num_examine=0, zeroshot_cache_file=f"data/{config.generator_llm.replace('/', '_')}/zeroshot_answers_.json")
 
     # Note that we always use function-based RM for validation
-    val_reward_fn = RewardManager(tokenizer=tokenizer, num_examine=1)
+    val_reward_fn = RewardManager(tokenizer=tokenizer, num_examine=1, zeroshot_cache_file=f"data/{config.generator_llm.replace('/', '_')}/zeroshot_answers_.json")
 
     resource_pool_manager = ResourcePoolManager(resource_pool_spec=resource_pool_spec, mapping=mapping)
     trainer = RayPPOTrainer(config=config,
