@@ -2,7 +2,7 @@ import os
 import random
 import pandas as pd
 import json
-from verl.utils.reward_score.rag_2 import generate_answer, check_answer_correct
+from verl.utils.reward_score.rag_2 import generate_answer, check_answer_correct, em_check
 from verl.utils.hdfs_io import copy, makedirs
 import argparse
 from tqdm import tqdm
@@ -82,19 +82,20 @@ def process_question(row, lock, context_dir):
         context = load_context(question, data_source, context_dir)
         
         if context == -1:
-            print(f"Warning: No context found for question: {question}")
-            return None, None, None, None
+            # print(f"Warning: No context found for question: {question}")
+            return None, None, None, None, None
             
         # Generate answer with context
         answer = generate_answer(prompt=question, context=context)
         
         # Check if answer is correct
         is_correct = check_answer_correct(answer=answer, golden_answers=golden_answers)
+        is_em = em_check(prediction=answer, golden_answers=golden_answers)
         
-        return question, answer, is_correct, data_source
+        return question, answer, is_correct, is_em, data_source
     except Exception as e:
         print(f"Error processing question: {str(e)}")
-        return None, None, None, None
+        return None, None, None, None, None
 
 def process_dataset(input_file, result_file, context_dir, num_workers=16):
     # Load the dataset
@@ -106,9 +107,8 @@ def process_dataset(input_file, result_file, context_dir, num_workers=16):
     lock = threading.Lock()
     
     # Load previous results
-    answers = load_previous_results(result_file)
-    if not answers:
-        answers = {}
+    # answers = load_previous_results(result_file)
+    answers = {}
     
     # Initialize data source statistics
     data_source_stats = {}
@@ -117,7 +117,9 @@ def process_dataset(input_file, result_file, context_dir, num_workers=16):
             'total': 0,
             'correct': 0,
             'accuracy': 0.0,
-            'no_context': 0
+            'no_context': 0,
+            'em_correct': 0,
+            'em_accuracy': 0.0
         }
     
     # Filter out already processed questions
@@ -126,8 +128,10 @@ def process_dataset(input_file, result_file, context_dir, num_workers=16):
         processed_questions_set.update(questions.keys())
         # Update data source stats from previous results
         correct_count = sum(1 for info in questions.values() if info['score'] == 1)
+        em_correct_count = sum(1 for info in questions.values() if info['em_score'] == 1)
         data_source_stats[data_source]['total'] = len(questions)
         data_source_stats[data_source]['correct'] = correct_count
+        data_source_stats[data_source]['em_correct'] = em_correct_count
         data_source_stats[data_source]['accuracy'] = correct_count / len(questions) if questions else 0
     
     remaining_df = df[~df['reward_model'].apply(lambda x: x['ground_truth']['question']).isin(processed_questions_set)]
@@ -144,42 +148,55 @@ def process_dataset(input_file, result_file, context_dir, num_workers=16):
     with ThreadPoolExecutor(max_workers=num_workers) as executor:
         # Submit all tasks
         futures = {executor.submit(process_question, row, lock, context_dir): idx for idx, row in remaining_df.iterrows()}
+        print(f"Total futures submitted: {len(futures)}")
         
         # Process results as they complete
         with tqdm(total=len(futures)) as pbar:
             for future in as_completed(futures):
-                question, answer, is_correct, data_source = future.result()
-                
-                with lock:
-                    if question is not None:  # Valid context found
-                        # Initialize data source if not exists
-                        if data_source not in answers:
-                            answers[data_source] = {}
-                        
-                        # Store results
-                        answers[data_source][question] = {
-                            'answer': answer,
-                            'score': 1 if is_correct else 0
-                        }
-                        
-                        # Update data source statistics
-                        data_source_stats[data_source]['total'] += 1
-                        if is_correct:
-                            data_source_stats[data_source]['correct'] += 1
-                        data_source_stats[data_source]['accuracy'] = (
-                            data_source_stats[data_source]['correct'] / 
-                            data_source_stats[data_source]['total']
-                        )
-                    else:  # No context found
-                        data_source_stats[data_source]['no_context'] += 1
-                        
-                    # Print statistics every 100 steps
-                    if pbar.n % 100 == 0:
-                        print("\nCurrent statistics per data source:")
-                        for source, stats in data_source_stats.items():
-                            print(f"{source}: {stats['correct']}/{stats['total']} correct ({stats['accuracy']:.2%})")
-                
-                pbar.update(1)
+                try:
+                    question, answer, is_correct, is_em, data_source = future.result()
+                    # print(f"Completed future: {futures[future]}")  # Debug print
+                    
+                    # Update progress bar immediately
+                    pbar.update(1)
+                    
+                    with lock:
+                        if question is not None:  # Valid context found
+                            # Initialize data source if not exists
+                            if data_source not in answers:
+                                answers[data_source] = {}
+                            
+                            # Store results
+                            answers[data_source][question] = {
+                                'answer': answer,
+                                'score': 1 if is_correct else 0,
+                                'em_score': 1 if is_em else 0
+                            }
+                            
+                            # Update data source statistics
+                            data_source_stats[data_source]['total'] += 1
+                            if is_correct:
+                                data_source_stats[data_source]['correct'] += 1
+                            if is_em:
+                                data_source_stats[data_source]['em_correct'] += 1
+                            data_source_stats[data_source]['accuracy'] = (
+                                data_source_stats[data_source]['correct'] / 
+                                data_source_stats[data_source]['total']
+                            )
+                            data_source_stats[data_source]['em_accuracy'] = (
+                                data_source_stats[data_source]['em_correct'] / 
+                                data_source_stats[data_source]['total']
+                            )
+                        else:  # No context found
+                            data_source_stats[data_source]['no_context'] += 1
+                            
+                        # Print statistics every 100 steps
+                        if pbar.n % 100 == 0:
+                            print("\nCurrent statistics per data source:")
+                            for source, stats in data_source_stats.items():
+                                print(f"{source}: {stats['correct']}/{stats['total']} correct ({stats['accuracy']:.2%}), {stats['em_correct']}/{stats['total']} em correct ({stats['em_accuracy']:.2%})")
+                except Exception as e:
+                    print(f"Error processing future: {str(e)}")
     
     # Save final results
     print("\nSaving final results")
@@ -188,7 +205,7 @@ def process_dataset(input_file, result_file, context_dir, num_workers=16):
     # Print final statistics
     print("\nFinal Statistics per Data Source:")
     for source, stats in data_source_stats.items():
-        print(f"{source}: {stats['correct']}/{stats['total']} correct ({stats['accuracy']:.2%})")
+        print(f"{source}: {stats['correct']}/{stats['total']} correct ({stats['accuracy']:.2%}), {stats['em_correct']}/{stats['total']} em correct ({stats['em_accuracy']:.2%})")
     print(f"\nResults saved to: {result_file}")
     print(f"Statistics saved to: {stats_file}")
     
