@@ -3,10 +3,10 @@ data_name=nq_hotpotqa_train
 export CUDA_VISIBLE_DEVICES=1,2,3,4
 export DATA_DIR=data/${data_name} # first download the data from https://huggingface.co/datasets/PeterJinGo/nq_hotpotqa_train
 
-WAND_PROJECT="Search-C1"
+WAND_PROJECT="SearchAgent"
 
-export BASE_MODEL='Qwen/Qwen2.5-7B-Instruct'
-export EXPERIMENT_NAME="search-c1-grpo-qwen2.5-7b-rag-e5-ug"
+export BASE_MODEL='Qwen/Qwen2.5-7B'
+export EXPERIMENT_NAME="search-agent-grpo-qwen2.5-7b-rag-e5-ug"
 export VLLM_ATTENTION_BACKEND=XFORMERS
 
 PYTHONUNBUFFERED=1 python3 -m verl.trainer.main_ppo \
@@ -14,9 +14,9 @@ PYTHONUNBUFFERED=1 python3 -m verl.trainer.main_ppo \
     data.val_files=$DATA_DIR/test_e5_ug.parquet \
     data.train_data_num=null \
     data.val_data_num=null \
-    data.train_batch_size=128 \
+    data.train_batch_size=256 \
     data.val_batch_size=64 \
-    data.max_prompt_length=5000 \
+    data.max_prompt_length=6000 \
     data.max_response_length=500 \
     data.max_start_length=2000 \
     data.max_obs_length=800 \
@@ -60,7 +60,7 @@ PYTHONUNBUFFERED=1 python3 -m verl.trainer.main_ppo \
     trainer.default_hdfs_dir=null \
     trainer.default_local_dir=verl_checkpoints/$EXPERIMENT_NAME \
     max_turns=4 \
-    +generator_llm="claude-3" \
+    +generator_llm="Qwen/Qwen2.5-14B-Instruct-GPTQ-Int4" \
     retriever.url="http://127.0.0.1:4000/retrieve" \
     retriever.topk=3 \
     2>&1 | tee $EXPERIMENT_NAME.log

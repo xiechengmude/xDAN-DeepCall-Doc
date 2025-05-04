@@ -17,25 +17,18 @@ Note that we don't combine the main with ray_trainer as ray_trainer is used by o
 
 from verl import DataProto
 import torch
-# from verl.utils.reward_score import rag, ppl, rag_new
-# from verl.utils.reward_score import rag_new
-from verl.utils.reward_score import rag_2
-
+from verl.utils.reward_score import qa_em
 from verl.trainer.ppo.ray_trainer import RayPPOTrainer
 import re
-import os
-import json
 import numpy as np
 import threading
+import os
+import json
 import random
-
-from verl.utils.reward_score.rag_2 import output_sequence
-
 
 def _select_rm_score_fn(data_source):
     if data_source in ['nq', 'triviaqa', 'popqa', 'hotpotqa', '2wikimultihopqa', 'musique', 'bamboogle']:
-        # return rag.compute_score_rag
-        return rag_2.compute_score_rag
+        return qa_em.compute_score_em
     else:
         raise NotImplementedError
 
@@ -44,41 +37,37 @@ class RewardManager():
     """The reward manager.
     """
 
-    def __init__(self, tokenizer, num_examine, format_score=0., zeroshot_cache_file="data/Qwen_Qwen2.5-7B-Instruct-GPTQ-Int4/zeroshot_answers_.json", val_only=False) -> None:
+    def __init__(self, tokenizer, num_examine, format_score=0., sequences_cache_dir="data/sequences_cache") -> None:
         self.tokenizer = tokenizer
         self.num_examine = num_examine  # the number of batches of decoded responses to print to the console
         self.format_score = format_score
-        self.zeroshot_cache_file = zeroshot_cache_file
-        self.zeroshot_lock = threading.Lock()
-        self.val_only = val_only
+        self.sequences_cache_dir = sequences_cache_dir
+        self.sequences_lock = threading.Lock()
+        self.sequences_data = {}
         
-        # Add new cache directory for output sequences
-        self.output_sequences_dir = os.path.join("data", "output_sequences")
-        os.makedirs(self.output_sequences_dir, exist_ok=True)
-        self.output_sequences_lock = threading.Lock()
-        self.output_sequences_data = {}
-        
-        if os.path.exists(self.zeroshot_cache_file):
-            self.zeroshot_answers = json.load(open(self.zeroshot_cache_file))
-        else:
-            os.makedirs(os.path.dirname(self.zeroshot_cache_file), exist_ok=True)
-            self.zeroshot_answers = {}
+        # Create cache directory if it doesn't exist
+        os.makedirs(self.sequences_cache_dir, exist_ok=True)
 
-    def _save_output_sequences(self, data_source):
-        """Save output sequences to file for a specific data source"""
-        if data_source not in self.output_sequences_data:
+    def _save_sequences(self, data_source):
+        """Save sequences to file for a specific data source"""
+        if data_source not in self.sequences_data:
             return
             
-        cache_file = os.path.join(self.output_sequences_dir, f"{data_source}_output_sequences.json")
-        with self.output_sequences_lock:
-            with open(cache_file, 'w') as f:
-                json.dump(self.output_sequences_data[data_source], f, indent=2)
+        # Save to a temporary file first
+        temp_file = os.path.join(self.sequences_cache_dir, f"{data_source}_sequences.json.tmp")
+        final_file = os.path.join(self.sequences_cache_dir, f"{data_source}_sequences.json")
+        
+        with self.sequences_lock:
+            with open(temp_file, 'w') as f:
+                json.dump(self.sequences_data[data_source], f)
+            # Atomic rename
+            os.rename(temp_file, final_file)
 
-    def save_all_output_sequences(self):
-        """Save all output sequences for all data sources"""
-        with self.output_sequences_lock:
-            for data_source in self.output_sequences_data:
-                self._save_output_sequences(data_source)
+    def save_all_sequences(self):
+        """Save all sequences for all data sources"""
+        with self.sequences_lock:
+            for data_source in self.sequences_data:
+                self._save_sequences(data_source)
 
     def __call__(self, data: DataProto):
         """We will expand this function gradually based on the available datasets"""
@@ -95,7 +84,9 @@ class RewardManager():
             data_item = data[i]  # DataProtoItem
 
             prompt_ids = data_item.batch['prompts']
+
             prompt_length = prompt_ids.shape[-1]
+
             valid_prompt_length = data_item.batch['attention_mask'][:prompt_length].sum()
             valid_prompt_ids = prompt_ids[-valid_prompt_length:]
 
@@ -113,69 +104,19 @@ class RewardManager():
             data_source = data_item.non_tensor_batch['data_source']
             compute_score_fn = _select_rm_score_fn(data_source)
 
-            # Get scores and zeroshot info
-            if not self.val_only:
-                score, answer_zeroshot, answer_zeroshot_score = compute_score_fn(
-                    solution_str=sequences_str, 
-                    ground_truth=ground_truth, 
-                    zeroshot_answers=self.zeroshot_answers,
-                    val_only=self.val_only
-                )
-                
-                # Safely update zeroshot answers if needed
-                question = ground_truth['question']
-                if question not in self.zeroshot_answers:
-                    with self.zeroshot_lock:
-                        # Double check after acquiring lock
-                        if question not in self.zeroshot_answers:
-                            self.zeroshot_answers[question] = {
-                                'answer': answer_zeroshot,
-                                'score': answer_zeroshot_score
-                            }
-                            # Save to file periodically
-                            if random.random() < 0.01:  # Save 1% of the time
-                                with open(self.zeroshot_cache_file, 'w') as f:
-                                    json.dump(self.zeroshot_answers, f)
-                                    
-                        elif self.zeroshot_answers[question]['score'] != answer_zeroshot_score:
-                            self.zeroshot_answers[question] = {
-                                'answer': answer_zeroshot,
-                                'score': answer_zeroshot_score
-                            }
-                            # Save to file periodically
-                            if random.random() < 0.01:  # Save 1% of the time
-                                with open(self.zeroshot_cache_file, 'w') as f:
-                                    json.dump(self.zeroshot_answers, f)
-            else:
-                print(f"start output sequence")
-                question, golden_answers, context_with_info, response_str = output_sequence(solution_str=sequences_str, ground_truth=ground_truth)
-                print(f"output sequence end")
-                score = 0
-                
-                # Store output sequence results
-                with self.output_sequences_lock:
-                    if data_source not in self.output_sequences_data:
-                        self.output_sequences_data[data_source] = {}
-                    
-                    self.output_sequences_data[data_source][question] = {
-                        'golden_answers': golden_answers,
-                        'context_with_info': context_with_info,
-                        'response_str': response_str
-                    }
-                    
-                    # Periodically save to file (1% chance)
-                    if random.random() < 0.01:
-                        # Save to a temporary file first
-                        temp_file = os.path.join(self.output_sequences_dir, f"{data_source}_output_sequences.json.tmp")
-                        with open(temp_file, 'w') as f:
-                            json.dump(self.output_sequences_data[data_source], f, indent=2)
-                        # Atomic rename
-                        final_file = os.path.join(self.output_sequences_dir, f"{data_source}_output_sequences.json")
-                        os.rename(temp_file, final_file)
-                        
-                print(f"output sequence data end")
+            score = compute_score_fn(solution_str=sequences_str, ground_truth=ground_truth, format_score=self.format_score)
 
             reward_tensor[i, valid_response_length - 1] = score
+
+            # Store sequences with thread-safe operations
+            with self.sequences_lock:
+                if data_source not in self.sequences_data:
+                    self.sequences_data[data_source] = []
+                self.sequences_data[data_source].append(sequences_str)
+                
+                # Periodically save to file (1% chance)
+                if random.random() < 0.01:
+                    self._save_sequences(data_source)
 
             if data_source not in already_print_data_sources:
                 already_print_data_sources[data_source] = 0
@@ -270,10 +211,14 @@ def main_task(config):
         role_worker_mapping[Role.RewardModel] = ray.remote(RewardModelWorker)
         mapping[Role.RewardModel] = global_pool_id
 
-    reward_fn = RewardManager(tokenizer=tokenizer, num_examine=0, zeroshot_cache_file=f"data/{config.generator_llm.replace('/', '_')}/zeroshot_answers_.json")
+    reward_fn = RewardManager(tokenizer=tokenizer, num_examine=0)
 
     # Note that we always use function-based RM for validation
-    val_reward_fn = RewardManager(tokenizer=tokenizer, num_examine=1, zeroshot_cache_file=f"data/{config.generator_llm.replace('/', '_')}/zeroshot_answers_.json", val_only=True)
+    val_reward_fn = RewardManager(
+        tokenizer=tokenizer, 
+        num_examine=1,
+        sequences_cache_dir=f"data/sequences_cache"
+    )
 
     resource_pool_manager = ResourcePoolManager(resource_pool_spec=resource_pool_spec, mapping=mapping)
     trainer = RayPPOTrainer(config=config,
@@ -287,9 +232,9 @@ def main_task(config):
     trainer.init_workers()
     trainer.fit()
     
-    # Save all output sequences at the end of training
-    reward_fn.save_all_output_sequences()
-    val_reward_fn.save_all_output_sequences()
+    # Save all sequences at the end of training
+    reward_fn.save_all_sequences()
+    val_reward_fn.save_all_sequences()
 
 
 if __name__ == '__main__':

@@ -6,7 +6,7 @@ export DATA_DIR=data/${data_name} # first download the data from https://hugging
 WAND_PROJECT="SearchAgent"
 
 export BASE_MODEL='Qwen/Qwen2.5-7B'
-export EXPERIMENT_NAME="search-agent-ppo-qwen2.5-7b-rag-e5-ug"
+export EXPERIMENT_NAME="search-agent-ppo-qwen2.5-7b-rag-e5-ug-v2"
 export VLLM_ATTENTION_BACKEND=XFORMERS
 
 PYTHONUNBUFFERED=1 python3 -m verl.trainer.main_ppo \

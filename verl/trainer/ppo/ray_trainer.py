@@ -43,6 +43,7 @@ import re
 # from search_c1.llm_agent.generation import LLMGenerationManager, GenerationConfig
 # from search_c1.llm_agent.generation_perp import LLMGenerationManager, GenerationConfig
 from search_c1.llm_agent.generation_ug import LLMGenerationManager, GenerationConfig
+from tqdm import tqdm
 
 
 WorkerType = Type[Worker]
@@ -627,7 +628,7 @@ class RayPPOTrainer(object):
                 reward_tensor_lst.append(reward_tensor)
                 data_source_lst.append(test_batch.non_tensor_batch.get('data_source', ['unknown'] * reward_tensor.shape[0]))
         else:
-            for batch_dict in self.val_dataloader:
+            for batch_dict in tqdm(self.val_dataloader):
                 timing_raw = {}
                 test_batch: DataProto = DataProto.from_single_dict(batch_dict)
                 # test_batch = test_batch.repeat(repeat_times=self.config.actor_rollout_ref.rollout.n_agent, interleave=True)
@@ -644,11 +645,14 @@ class RayPPOTrainer(object):
                     first_input_ids = test_gen_batch.batch['input_ids'][:, -gen_config.max_start_length:].clone()
                     with _timer('gen', timing_raw):
                         generation_manager.timing_raw = timing_raw
+                        
+                        print(f"start generation")
                         final_gen_batch_output = generation_manager.run_llm_loop(
                             gen_batch=test_gen_batch,
                             initial_input_ids=first_input_ids,
                         )
-                        generation_manager._save_zeroshot_answers(gen_config.zero_shot_store_file)
+                        print(f"generation end")
+                        # generation_manager._save_zeroshot_answers(gen_config.zero_shot_store_file)
                     
                     test_batch = test_batch.union(final_gen_batch_output)
                     
@@ -657,27 +661,29 @@ class RayPPOTrainer(object):
                     
                     # evaluate using reward_function
                     # for certain reward function (e.g. sandbox), the generation can overlap with reward
+                    print(f"start extraction")
                     reward_tensor = self.val_reward_fn(test_batch)
+                    print(f"extraction end")
 
-                    reward_tensor_lst.append(reward_tensor)
-                    data_source_lst.append(test_batch.non_tensor_batch.get('data_source', ['unknown'] * reward_tensor.shape[0]))
+        #             reward_tensor_lst.append(reward_tensor)
+        #             data_source_lst.append(test_batch.non_tensor_batch.get('data_source', ['unknown'] * reward_tensor.shape[0]))
 
-        reward_tensor = torch.cat([rw.sum(-1) for rw in reward_tensor_lst], dim=0).cpu()  # (batch_size,)
-        # reward_tensor = torch.cat(reward_tensor_lst, dim=0).sum(-1).cpu()  # (batch_size,)
-        data_sources = np.concatenate(data_source_lst, axis=0)
-        # evaluate test_score based on data source
-        data_source_reward = {}
-        for i in range(reward_tensor.shape[0]):
-            data_source = data_sources[i]
-            if data_source not in data_source_reward:
-                data_source_reward[data_source] = []
-            data_source_reward[data_source].append(reward_tensor[i].item())
+        # reward_tensor = torch.cat([rw.sum(-1) for rw in reward_tensor_lst], dim=0).cpu()  # (batch_size,)
+        # # reward_tensor = torch.cat(reward_tensor_lst, dim=0).sum(-1).cpu()  # (batch_size,)
+        # data_sources = np.concatenate(data_source_lst, axis=0)
+        # # evaluate test_score based on data source
+        # data_source_reward = {}
+        # for i in range(reward_tensor.shape[0]):
+        #     data_source = data_sources[i]
+        #     if data_source not in data_source_reward:
+        #         data_source_reward[data_source] = []
+        #     data_source_reward[data_source].append(reward_tensor[i].item())
 
-        metric_dict = {}
-        for data_source, rewards in data_source_reward.items():
-            metric_dict[f'val/test_score/{data_source}'] = np.mean(rewards)
+        # metric_dict = {}
+        # for data_source, rewards in data_source_reward.items():
+        #     metric_dict[f'val/test_score/{data_source}'] = np.mean(rewards)
 
-        return metric_dict
+        # return metric_dict
 
 
     def init_workers(self):
@@ -796,9 +802,9 @@ class RayPPOTrainer(object):
         # perform validation before training
         # currently, we only support validation using the reward_function.
         if self.val_reward_fn is not None and self.config.trainer.get('val_before_train', True):
-            val_metrics = self._validate()
-            pprint(f'Initial validation metrics: {val_metrics}')
-            logger.log(data=val_metrics, step=self.global_steps)
+            self._validate()
+            # pprint(f'Initial validation metrics: {val_metrics}')
+            # logger.log(data=val_metrics, step=self.global_steps)
             if self.config.trainer.get('val_only', False):
                 return
 

@@ -82,14 +82,33 @@ def extract_titles_and_texts(solution_str):
             # Parse important doc IDs
             important_ids = []
             try:
-                for id_str in match.group(1).strip().split(','):
+                # Extract the content between brackets and clean it
+                content = match.group(1).strip()
+                
+                # Remove any whitespace, quotes, and "Doc" prefixes
+                cleaned_content = re.sub(r'["\']|Doc\s*|\s+', '', content)
+                
+                # Split by comma and process each ID
+                for id_str in cleaned_content.split(','):
                     id_str = id_str.strip()
-                    if id_str:  # Only process non-empty strings
-                        try:
-                            important_ids.append(int(id_str))
-                        except ValueError:
-                            print(f"Warning: Invalid document ID format: {id_str}")
-                            continue
+                    if not id_str:  # Skip empty strings
+                        continue
+                        
+                    # Try to convert to integer if it's a numeric ID
+                    try:
+                        important_ids.append(int(id_str))
+                    except ValueError:
+                        # If not numeric, try to extract just the number if it's in "DocX" format
+                        num_match = re.search(r'\d+', id_str)
+                        if num_match:
+                            important_ids.append(int(num_match.group()))
+                        else:
+                            # If no number found, keep the original string
+                            important_ids.append(id_str)
+                            
+                # Remove duplicates while preserving order
+                important_ids = list(dict.fromkeys(important_ids))
+                
             except Exception as e:
                 print(f"Warning: Error parsing important document IDs: {str(e)}")
                 important_ids = []
@@ -144,8 +163,12 @@ def extract_titles_and_texts(solution_str):
             
             # Filter by important_ids if available
             if important_ids:
-                filtered_docs = [(title, text) for doc_id, title, text in docs_in_block 
-                                if doc_id in important_ids]
+                try:
+                    filtered_docs = [(title, text) for doc_id, title, text in docs_in_block 
+                                    if doc_id in important_ids or str(doc_id) in important_ids or f"Doc {doc_id}" in important_ids]
+                except Exception as e:
+                    print(f"Warning: Error filtering documents: {str(e)}")
+                    filtered_docs = [(title, text) for _, title, text in docs_in_block]
             else:
                 # If no important_ids, include all docs
                 filtered_docs = [(title, text) for _, title, text in docs_in_block]
@@ -177,7 +200,7 @@ def check_answer_correct(answer, golden_answers):
     return answer_context_score
 
 
-def compute_score_rag(solution_str, ground_truth, zeroshot_answers, use_generation_score=True):
+def compute_score_rag(solution_str, ground_truth, zeroshot_answers, use_utility_score=True, use_generation_score=True):
     """
     Args:
         solution_str: the solution text
@@ -206,24 +229,31 @@ def compute_score_rag(solution_str, ground_truth, zeroshot_answers, use_generati
             context_with_info += f"Doc {doc_id} (Title: {title})\n{text}\n\n"
             doc_id += 1
         
-    answer_context = generate_answer(prompt=question, context=context_with_info)
-    answer_context_score = check_answer_correct(answer=answer_context, golden_answers=golden_answers)
         
-    if question in zeroshot_answers:
-        answer_zeroshot = zeroshot_answers[question]['answer']
-        # answer_zeroshot_score = zeroshot_answers[question]['score']
-        answer_zeroshot_score = check_answer_correct(answer=answer_zeroshot, golden_answers=golden_answers)
-    else:
-        answer_zeroshot = generate_answer_zero_shot(prompt=question)
-        answer_zeroshot_score = check_answer_correct(answer=answer_zeroshot, golden_answers=golden_answers)
+    if use_utility_score:
+        if question in zeroshot_answers:
+            answer_zeroshot = zeroshot_answers[question]['answer']
+            # answer_zeroshot_score = zeroshot_answers[question]['score']
+            answer_zeroshot_score = check_answer_correct(answer=answer_zeroshot, golden_answers=golden_answers)
+        else:
+            answer_zeroshot = generate_answer_zero_shot(prompt=question)
+            answer_zeroshot_score = check_answer_correct(answer=answer_zeroshot, golden_answers=golden_answers)
         
-    utility_score = answer_context_score - answer_zeroshot_score
-    generation_score = answer_context_score
+        utility_score = answer_context_score - answer_zeroshot_score
     
     if use_generation_score:
+        answer_context = generate_answer(prompt=question, context=context_with_info)
+        answer_context_score = check_answer_correct(answer=answer_context, golden_answers=golden_answers)
+        generation_score = answer_context_score
+    
+    if use_generation_score and use_utility_score:
         score = utility_score + generation_score
-    else:
+    elif use_generation_score:
+        score = generation_score
+    elif use_utility_score:
         score = utility_score
+    else:
+        raise ValueError("use_generation_score and use_utility_score cannot both be False")
     
     do_print = random.randint(1, 16) == 1
         
@@ -241,4 +271,43 @@ def compute_score_rag(solution_str, ground_truth, zeroshot_answers, use_generati
         print(f"Solution string: {solution_str}")
     
     return score, answer_zeroshot, answer_zeroshot_score
+
+
+def output_sequence(solution_str, ground_truth):
+    """
+    Args:
+        solution_str: the solution text
+        ground_truth: the ground truth
+        zeroshot_answers: dictionary containing cached zeroshot answers
+    """
+    
+    
+    question = ground_truth['question']
+    golden_answers = ground_truth['target'].tolist()
+    
+    # Get documents with titles, handling important documents
+    response_str = solution_str.split("Now, start the loop with the following question:")[1]
+    docs = extract_titles_and_texts(solution_str=response_str)
+    
+    # Build context with unique documents
+    seen_docs = set()
+    doc_id = 1
+    context_with_info = ""
+    for title, text in docs:
+        doc_key = (title, text)
+        if doc_key not in seen_docs:
+            seen_docs.add(doc_key)
+            context_with_info += f"Doc {doc_id} (Title: {title})\n{text}\n\n"
+            doc_id += 1
+        
+    do_print = random.randint(1, 16) == 1
+        
+    if do_print:
+        print(f"--------------------------------")
+        print(f"Question: {question}")
+        print(f"Golden answers: {ground_truth['target']}")
+        print(f"Extracted doc_info: {context_with_info}")
+        print(f"Solution string: {solution_str}")
+    
+    return question, golden_answers, context_with_info, response_str
     
