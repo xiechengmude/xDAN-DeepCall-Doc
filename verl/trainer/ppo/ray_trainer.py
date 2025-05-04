@@ -43,6 +43,7 @@ import re
 # from search_c1.llm_agent.generation import LLMGenerationManager, GenerationConfig
 # from search_c1.llm_agent.generation_perp import LLMGenerationManager, GenerationConfig
 from search_c1.llm_agent.generation_ug import LLMGenerationManager, GenerationConfig
+
 from tqdm import tqdm
 
 
@@ -664,6 +665,8 @@ class RayPPOTrainer(object):
                     print(f"start extraction")
                     reward_tensor = self.val_reward_fn(test_batch)
                     print(f"extraction end")
+                    
+            self.val_reward_fn.save_all_output_sequences()
 
         #             reward_tensor_lst.append(reward_tensor)
         #             data_source_lst.append(test_batch.non_tensor_batch.get('data_source', ['unknown'] * reward_tensor.shape[0]))

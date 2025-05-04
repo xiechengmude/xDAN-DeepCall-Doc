@@ -23,7 +23,7 @@ PYTHONUNBUFFERED=1 python3 -m verl.trainer.main_ppo \
     data.max_obs_length=800 \
     data.shuffle_train_dataloader=True \
     algorithm.adv_estimator=gae \
-    actor_rollout_ref.model.path=verl_checkpoints/search-agent-ppo-qwen2.5-7b-rag-e5-ug-v2/actor/global_step_150 \
+    actor_rollout_ref.model.path=verl_checkpoints/search-agent-ppo-qwen2.5-7b-rag-e5-ug-v2/actor/global_step_350 \
     actor_rollout_ref.actor.optim.lr=1e-6 \
     actor_rollout_ref.model.enable_gradient_checkpointing=true \
     actor_rollout_ref.model.use_remove_padding=True \
@@ -40,7 +40,7 @@ PYTHONUNBUFFERED=1 python3 -m verl.trainer.main_ppo \
     critic.optim.lr=1e-5 \
     critic.model.use_remove_padding=True \
     critic.optim.lr_warmup_steps_ratio=0.05 \
-    critic.model.path=verl_checkpoints/search-agent-ppo-qwen2.5-7b-rag-e5-ug-v2/critic/global_step_150 \
+    critic.model.path=verl_checkpoints/search-agent-ppo-qwen2.5-7b-rag-e5-ug-v2/critic/global_step_350 \
     critic.model.enable_gradient_checkpointing=true \
     critic.ppo_micro_batch_size=8 \
     algorithm.kl_ctrl.kl_coef=0.001 \
@@ -56,4 +56,4 @@ PYTHONUNBUFFERED=1 python3 -m verl.trainer.main_ppo \
     +generator_llm="Qwen/Qwen2.5-14B-Instruct-GPTQ-Int4" \
     retriever.url="http://127.0.0.1:7000/retrieve" \
     retriever.topk=3 \
-    2>&1 | tee evaluation.log
+    2>&1 | tee evaluation_350.log

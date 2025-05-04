@@ -1,0 +1,43 @@
+{
+  "timestamp": "2025-05-04T12:43:55.983934",
+  "total_questions": 51713,
+  "processed_questions": 50508,
+  "data_source_stats": {
+    "nq": {
+      "total": 3610,
+      "correct": 1437,
+      "accuracy": 0.39806094182825486
+    },
+    "triviaqa": {
+      "total": 11313,
+      "correct": 7161,
+      "accuracy": 0.6329885971890745
+    },
+    "popqa": {
+      "total": 14267,
+      "correct": 3459,
+      "accuracy": 0.2424476063643373
+    },
+    "hotpotqa": {
+      "total": 7405,
+      "correct": 2297,
+      "accuracy": 0.3101958136394328
+    },
+    "2wikimultihopqa": {
+      "total": 12576,
+      "correct": 4969,
+      "accuracy": 0.3951176844783715
+    },
+    "musique": {
+      "total": 2417,
+      "correct": 296,
+      "accuracy": 0.12246586677699628
+    },
+    "bamboogle": {
+      "total": 125,
+      "correct": 39,
+      "accuracy": 0.312
+    }
+  },
+  "remaining_questions": 1205
+}
