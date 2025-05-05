@@ -2,7 +2,7 @@ import os
 import random
 import pandas as pd
 import json
-from verl.utils.reward_score.rag_2 import generate_answer, check_answer_correct, em_check
+from verl.utils.reward_score.rag_2 import generate_answer, check_answer_correct, em_check, generate_answer_zero_shot
 from verl.utils.hdfs_io import copy, makedirs
 import argparse
 from tqdm import tqdm
@@ -58,7 +58,7 @@ def save_results(answers, result_file, stats_file, total_questions, data_source_
         print(f"Error saving results: {str(e)}")
         raise
 
-def load_context(question, data_source, context_dir):
+def load_context(question, data_source, context_dir, topk):
     """Load context for a question from the output sequences file"""
     context_file = os.path.join(context_dir, f"{data_source}_output_sequences.json")
     if not os.path.exists(context_file):
@@ -68,10 +68,10 @@ def load_context(question, data_source, context_dir):
     with open(context_file, 'r') as f:
         sequences = json.load(f)
         if question in sequences:
-            return sequences[question].get('context_with_info')
+            return sequences[question].get('context_with_info').split(f'Doc {topk+1}(')[0]
     return -1
 
-def process_question(row, lock, context_dir):
+def process_question(row, lock, context_dir, topk):
     try:
         # Extract question and golden answers from ground_truth
         question = row['reward_model']['ground_truth']['question']
@@ -79,14 +79,17 @@ def process_question(row, lock, context_dir):
         data_source = row['data_source']
         
         # Load context for the question
-        context = load_context(question, data_source, context_dir)
+        context = load_context(question, data_source, context_dir, topk)
         
         if context == -1:
-            # print(f"Warning: No context found for question: {question}")
+            print(f"Warning: No context found for question: {question}")
             return None, None, None, None, None
-            
-        # Generate answer with context
-        answer = generate_answer(prompt=question, context=context)
+        elif context == '':
+            print(f"Warning: Empty context found for question: {question}")
+            answer = generate_answer_zero_shot(question)
+        else:
+            # Generate answer with context
+            answer = generate_answer(prompt=question, context=context)
         
         # Check if answer is correct
         is_correct = check_answer_correct(answer=answer, golden_answers=golden_answers)
@@ -97,7 +100,7 @@ def process_question(row, lock, context_dir):
         print(f"Error processing question: {str(e)}")
         return None, None, None, None, None
 
-def process_dataset(input_file, result_file, context_dir, num_workers=16):
+def process_dataset(input_file, result_file, context_dir, num_workers=16, topk=12):
     # Load the dataset
     print(f"Loading dataset from {input_file}")
     df = pd.read_parquet(input_file)
@@ -147,7 +150,7 @@ def process_dataset(input_file, result_file, context_dir, num_workers=16):
     print(f"Processing remaining questions with {num_workers} workers...")
     with ThreadPoolExecutor(max_workers=num_workers) as executor:
         # Submit all tasks
-        futures = {executor.submit(process_question, row, lock, context_dir): idx for idx, row in remaining_df.iterrows()}
+        futures = {executor.submit(process_question, row, lock, context_dir, topk): idx for idx, row in remaining_df.iterrows()}
         print(f"Total futures submitted: {len(futures)}")
         
         # Process results as they complete
@@ -213,9 +216,12 @@ def process_dataset(input_file, result_file, context_dir, num_workers=16):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--input_file', default="data/nq_hotpotqa_train/test_e5_ug.parquet", help='Path to input parquet file')
-    parser.add_argument('--result_file', default="results/u1_step150.json", help='Path to save answers JSON file')
-    parser.add_argument('--context_dir', default="data/output_sequences_150", help='Directory containing context files')
+    parser.add_argument('--result_file', default="results/search_r1.json", help='Path to save answers JSON file')
+    # parser.add_argument('--result_file', default="results/rag.json", help='Path to save answers JSON file')
+    parser.add_argument('--context_dir', default="data/search-r1", help='Directory containing context files')
+    # parser.add_argument('--context_dir', default="data/RAG_Retrieval", help='Directory containing context files')
     parser.add_argument('--num_workers', type=int, default=16, help='Number of worker threads to use')
+    parser.add_argument('--topk', type=int, default=12, help='Number of context to use')
     
     args = parser.parse_args()
-    process_dataset(args.input_file, args.result_file, args.context_dir, args.num_workers) 
+    process_dataset(args.input_file, args.result_file, args.context_dir, args.num_workers, args.topk) 

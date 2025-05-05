@@ -44,7 +44,7 @@ class RewardManager():
     """The reward manager.
     """
 
-    def __init__(self, tokenizer, num_examine, format_score=0., zeroshot_cache_file="data/Qwen_Qwen2.5-7B-Instruct-GPTQ-Int4/zeroshot_answers_.json", val_only=False) -> None:
+    def __init__(self, tokenizer, num_examine, format_score=0., zeroshot_cache_file="data/Qwen_Qwen2.5-14B-Instruct-GPTQ-Int4/train/zeroshot_answers.json", val_only=False) -> None:
         self.tokenizer = tokenizer
         self.num_examine = num_examine  # the number of batches of decoded responses to print to the console
         self.format_score = format_score
@@ -53,12 +53,13 @@ class RewardManager():
         self.val_only = val_only
         
         # Add new cache directory for output sequences
-        self.output_sequences_dir = os.path.join("data", "output_sequences")
+        self.output_sequences_dir = os.path.join("data", "output_sequences_v2")
         os.makedirs(self.output_sequences_dir, exist_ok=True)
         self.output_sequences_lock = threading.Lock()
         self.output_sequences_data = {}
         
         if os.path.exists(self.zeroshot_cache_file):
+            print(f"load zeroshot answers from {self.zeroshot_cache_file}")
             self.zeroshot_answers = json.load(open(self.zeroshot_cache_file))
         else:
             os.makedirs(os.path.dirname(self.zeroshot_cache_file), exist_ok=True)
@@ -78,7 +79,12 @@ class RewardManager():
         """Save all output sequences for all data sources"""
         with self.output_sequences_lock:
             for data_source in self.output_sequences_data:
-                self._save_output_sequences(data_source)
+                if data_source not in self.output_sequences_data:
+                    continue
+                    
+                cache_file = os.path.join(self.output_sequences_dir, f"{data_source}_output_sequences.json")
+                with open(cache_file, 'w') as f:
+                    json.dump(self.output_sequences_data[data_source], f, indent=2)
 
     def __call__(self, data: DataProto):
         """We will expand this function gradually based on the available datasets"""
@@ -119,33 +125,34 @@ class RewardManager():
                     solution_str=sequences_str, 
                     ground_truth=ground_truth, 
                     zeroshot_answers=self.zeroshot_answers,
-                    val_only=self.val_only
+                    data_source=data_source
+                    # val_only=self.val_only
                 )
                 
                 # Safely update zeroshot answers if needed
-                question = ground_truth['question']
-                if question not in self.zeroshot_answers:
-                    with self.zeroshot_lock:
-                        # Double check after acquiring lock
-                        if question not in self.zeroshot_answers:
-                            self.zeroshot_answers[question] = {
-                                'answer': answer_zeroshot,
-                                'score': answer_zeroshot_score
-                            }
-                            # Save to file periodically
-                            if random.random() < 0.01:  # Save 1% of the time
-                                with open(self.zeroshot_cache_file, 'w') as f:
-                                    json.dump(self.zeroshot_answers, f)
+                # question = ground_truth['question']
+                # if question not in self.zeroshot_answers:
+                #     with self.zeroshot_lock:
+                #         # Double check after acquiring lock
+                #         if question not in self.zeroshot_answers:
+                #             self.zeroshot_answers[question] = {
+                #                 'answer': answer_zeroshot,
+                #                 'score': answer_zeroshot_score
+                #             }
+                #             # Save to file periodically
+                #             if random.random() < 0.01:  # Save 1% of the time
+                #                 with open(self.zeroshot_cache_file, 'w') as f:
+                #                     json.dump(self.zeroshot_answers, f)
                                     
-                        elif self.zeroshot_answers[question]['score'] != answer_zeroshot_score:
-                            self.zeroshot_answers[question] = {
-                                'answer': answer_zeroshot,
-                                'score': answer_zeroshot_score
-                            }
-                            # Save to file periodically
-                            if random.random() < 0.01:  # Save 1% of the time
-                                with open(self.zeroshot_cache_file, 'w') as f:
-                                    json.dump(self.zeroshot_answers, f)
+                #         elif self.zeroshot_answers[question]['score'] != answer_zeroshot_score:
+                #             self.zeroshot_answers[question] = {
+                #                 'answer': answer_zeroshot,
+                #                 'score': answer_zeroshot_score
+                #             }
+                #             # Save to file periodically
+                #             if random.random() < 0.01:  # Save 1% of the time
+                #                 with open(self.zeroshot_cache_file, 'w') as f:
+                #                     json.dump(self.zeroshot_answers, f)
             else:
                 print(f"start output sequence")
                 question, golden_answers, context_with_info, response_str = output_sequence(solution_str=sequences_str, ground_truth=ground_truth)
@@ -270,10 +277,10 @@ def main_task(config):
         role_worker_mapping[Role.RewardModel] = ray.remote(RewardModelWorker)
         mapping[Role.RewardModel] = global_pool_id
 
-    reward_fn = RewardManager(tokenizer=tokenizer, num_examine=0, zeroshot_cache_file=f"data/{config.generator_llm.replace('/', '_')}/zeroshot_answers_.json")
+    reward_fn = RewardManager(tokenizer=tokenizer, num_examine=0)
 
     # Note that we always use function-based RM for validation
-    val_reward_fn = RewardManager(tokenizer=tokenizer, num_examine=1, zeroshot_cache_file=f"data/{config.generator_llm.replace('/', '_')}/zeroshot_answers_.json", val_only=True)
+    val_reward_fn = RewardManager(tokenizer=tokenizer, num_examine=1, val_only=True)
 
     resource_pool_manager = ResourcePoolManager(resource_pool_spec=resource_pool_spec, mapping=mapping)
     trainer = RayPPOTrainer(config=config,

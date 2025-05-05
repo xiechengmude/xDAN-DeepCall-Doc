@@ -71,7 +71,7 @@ def extract_titles_and_texts(solution_str):
     even if there are other tags or content in between them.
     
     If an <information> block doesn't have a corresponding <important_info> tag,
-    all documents in that block are included.
+    no documents from that block are included.
     
     Returns a list of (title, text) tuples for each document.
     """
@@ -86,39 +86,24 @@ def extract_titles_and_texts(solution_str):
             info_blocks.append({
                 'position': match.start(),
                 'content': match.group(1),
-                'important_ids': None  # Will be filled if there's a matching important_info
+                'important_ids': None,  # Will be filled if there's a matching important_info
+                'processed': False  # Track if this block has been processed
             })
         
         # Find all important_info tags with their positions
-        important_pattern = re.compile(r'<important_info>\s*\[(.*?)\]\s*</important_info>', re.DOTALL)
+        important_pattern = re.compile(r'<important_info>(.*?)</important_info>', re.DOTALL)
         for match in important_pattern.finditer(solution_str):
             # Parse important doc IDs
             important_ids = []
             try:
-                # Extract the content between brackets and clean it
+                # Extract the content and clean it
                 content = match.group(1).strip()
                 
-                # Remove any whitespace, quotes, and "Doc" prefixes
-                cleaned_content = re.sub(r'["\']|Doc\s*|\s+', '', content)
+                # Extract all numbers from the content
+                numbers = re.findall(r'\d+', content)
+                # Only keep IDs 1, 2, and 3
+                important_ids = [int(num) for num in numbers if int(num) in [1, 2, 3]]
                 
-                # Split by comma and process each ID
-                for id_str in cleaned_content.split(','):
-                    id_str = id_str.strip()
-                    if not id_str:  # Skip empty strings
-                        continue
-                        
-                    # Try to convert to integer if it's a numeric ID
-                    try:
-                        important_ids.append(int(id_str))
-                    except ValueError:
-                        # If not numeric, try to extract just the number if it's in "DocX" format
-                        num_match = re.search(r'\d+', id_str)
-                        if num_match:
-                            important_ids.append(int(num_match.group()))
-                        else:
-                            # If no number found, keep the original string
-                            important_ids.append(id_str)
-                            
                 # Remove duplicates while preserving order
                 important_ids = list(dict.fromkeys(important_ids))
                 
@@ -131,67 +116,80 @@ def extract_titles_and_texts(solution_str):
                 'important_ids': important_ids
             })
         
-        # Match each important_info with the closest preceding information block
+        # Process each important_info tag and associate it with the closest unprocessed information block
+        all_docs = []
+        seen_docs = set()  # To track unique documents
+        
+        # Process each important_info tag and associate it with the closest unprocessed information block
         for imp_info in important_infos:
-            # Find the closest information block that appears before this important_info
+            # print(f"Processing important_info at position {imp_info['position']} with IDs {imp_info['important_ids']}")
+            # Find the closest unprocessed information block that appears before this important_info
             closest_info = None
             min_distance = float('inf')
             
             for info_block in info_blocks:
-                if info_block['position'] < imp_info['position']:
-                    distance = imp_info['position'] - info_block['position']
-                    if distance < min_distance:
-                        min_distance = distance
-                        closest_info = info_block
+                # print(f"Checking info_block at position {info_block['position']}, processed: {info_block['processed']}")
+                if not info_block['processed'] and info_block['position'] < imp_info['position']:
+                    # Only consider information blocks that are before this important_info
+                    # and don't have any other information blocks between them
+                    has_info_between = False
+                    for other_info in info_blocks:
+                        if (other_info['position'] > info_block['position'] and 
+                            other_info['position'] < imp_info['position']):
+                            has_info_between = True
+                            # print(f"Found info block between at position {other_info['position']}")
+                            break
+                    
+                    if not has_info_between:
+                        distance = imp_info['position'] - info_block['position']
+                        if distance < min_distance:
+                            min_distance = distance
+                            closest_info = info_block
+                            # print(f"Found closer info block at position {info_block['position']}")
             
-            # Associate this important_info with the closest preceding information block
+            # If we found a matching information block, process it
             if closest_info:
-                closest_info['important_ids'] = imp_info['important_ids']
-        
-        # Process each information block to extract documents
-        all_docs = []
-        seen_docs = set()  # To track unique documents
-        
-        for info_block in info_blocks:            
-            info_content = info_block['content']
-            important_ids = info_block['important_ids']
-            
-            docs_in_block = []
-            try:
-                # Extract individual documents from the info block
-                doc_pattern = re.compile(r'Doc\s+(\d+)\(Title:\s*(.*?)\)\s*(.*?)(?=Doc\s+\d+\(Title:|$)', re.DOTALL)
+                # print(f"Processing closest info block at position {closest_info['position']}")
+                closest_info['processed'] = True  # Mark as processed
+                info_content = closest_info['content']
+                important_ids = imp_info['important_ids']
                 
-                for match in doc_pattern.finditer(info_content):
-                    try:
-                        doc_id = int(match.group(1))
-                        title = match.group(2).strip().replace('"', '')  # Clean up quotes
-                        text = match.group(3).strip()
-                        docs_in_block.append((doc_id, title, text))
-                    except (IndexError, ValueError) as e:
-                        print(f"Warning: Error parsing document: {str(e)}")
-                        continue
-            except Exception as e:
-                print(f"Warning: Error extracting documents from info block: {str(e)}")
-                continue
-            
-            # Filter by important_ids if available
-            if important_ids:
+                docs_in_block = []
+                try:
+                    # Extract individual documents from the info block
+                    doc_pattern = re.compile(r'Doc\s*(\d+)\s*\(Title:\s*"?([^")]+)"?\)\s*(.*?)(?=Doc\s*\d+\s*\(Title:|$)', re.DOTALL)
+                    
+                    for match in doc_pattern.finditer(info_content):
+                        try:
+                            doc_id = int(match.group(1))
+                            title = match.group(2).strip()  # No need to replace quotes as they're excluded in the pattern
+                            text = match.group(3).strip()
+                            docs_in_block.append((doc_id, title, text))
+                            # print(f"Extracted doc {doc_id} with title {title}")
+                        except (IndexError, ValueError) as e:
+                            print(f"Warning: Error parsing document: {str(e)}")
+                            continue
+                except Exception as e:
+                    print(f"Warning: Error extracting documents from info block: {str(e)}")
+                    continue
+                
+                # Filter by important_ids
                 try:
                     filtered_docs = [(title, text) for doc_id, title, text in docs_in_block 
-                                    if doc_id in important_ids or str(doc_id) in important_ids or f"Doc {doc_id}" in important_ids]
+                                    if doc_id in important_ids]
+                    # print(f"Filtered docs: {filtered_docs}")
                 except Exception as e:
                     print(f"Warning: Error filtering documents: {str(e)}")
-                    filtered_docs = [(title, text) for _, title, text in docs_in_block]
+                    filtered_docs = []
+                
+                # Add unique documents to the result
+                for title, text in filtered_docs:
+                    if text not in seen_docs:
+                        seen_docs.add(text)
+                        all_docs.append((title, text))
+                        # print(f"Added doc with title {title}")
             else:
-                # If no important_ids, include all docs
-                filtered_docs = [(title, text) for _, title, text in docs_in_block]
-            
-            # Add unique documents to the result
-            for title, text in filtered_docs:
-                doc_key = (title, text)
-                if doc_key not in seen_docs:
-                    seen_docs.add(doc_key)
-                    all_docs.append((title, text))
+                print("No matching info block found")
         
         return all_docs
         
@@ -213,7 +211,7 @@ def check_answer_correct(answer, golden_answers):
     return answer_context_score
 
 
-def compute_score_rag(solution_str, ground_truth, zeroshot_answers, use_utility_score=True, use_generation_score=True):
+def compute_score_rag(solution_str, ground_truth, zeroshot_answers, data_source, use_utility_score=True, use_generation_score=True):
     """
     Args:
         solution_str: the solution text
@@ -228,7 +226,7 @@ def compute_score_rag(solution_str, ground_truth, zeroshot_answers, use_utility_
     golden_answers = ground_truth['target'].tolist()
     
     # Get documents with titles, handling important documents
-    response_str = solution_str.split("Now, start the loop with the following question:")[1]
+    response_str = solution_str.split("Now, start the loop with the following question and initial searched results:")[1]
     docs = extract_titles_and_texts(solution_str=response_str)
     
     # Build context with unique documents
@@ -244,20 +242,22 @@ def compute_score_rag(solution_str, ground_truth, zeroshot_answers, use_utility_
         
         
     if use_utility_score:
-        if question in zeroshot_answers:
-            answer_zeroshot = zeroshot_answers[question]['answer']
-            # answer_zeroshot_score = zeroshot_answers[question]['score']
-            answer_zeroshot_score = check_answer_correct(answer=answer_zeroshot, golden_answers=golden_answers)
+        if question in zeroshot_answers[data_source]:
+            answer_zeroshot = zeroshot_answers[data_source][question]['answer']
+            answer_zeroshot_score = zeroshot_answers[data_source][question]['score']
+            # answer_zeroshot_score = check_answer_correct(answer=answer_zeroshot, golden_answers=golden_answers)
         else:
+            print(f"[Warning] No zeroshot answer found for question: {question}")
             answer_zeroshot = generate_answer_zero_shot(prompt=question)
             answer_zeroshot_score = check_answer_correct(answer=answer_zeroshot, golden_answers=golden_answers)
-        
-        utility_score = answer_context_score - answer_zeroshot_score
     
     if use_generation_score:
         answer_context = generate_answer(prompt=question, context=context_with_info)
         answer_context_score = check_answer_correct(answer=answer_context, golden_answers=golden_answers)
         generation_score = answer_context_score
+        
+        
+    utility_score = answer_context_score - answer_zeroshot_score
     
     if use_generation_score and use_utility_score:
         score = utility_score + generation_score

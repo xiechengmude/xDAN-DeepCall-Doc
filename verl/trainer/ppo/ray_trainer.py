@@ -595,6 +595,8 @@ class RayPPOTrainer(object):
             config=gen_config,
             is_validation = True,
         )
+        
+        step_cnt = 0
 
         if not self.config.do_search:
             for test_data in self.val_dataloader:
@@ -666,7 +668,15 @@ class RayPPOTrainer(object):
                     reward_tensor = self.val_reward_fn(test_batch)
                     print(f"extraction end")
                     
+                    step_cnt += 1
+                    if step_cnt % 10 == 0:
+                        print(f"saving output sequences")
+                        self.val_reward_fn.save_all_output_sequences()
+                        print(f"saving output sequences end")
+                        
             self.val_reward_fn.save_all_output_sequences()
+                    
+                    
 
         #             reward_tensor_lst.append(reward_tensor)
         #             data_source_lst.append(test_batch.non_tensor_batch.get('data_source', ['unknown'] * reward_tensor.shape[0]))

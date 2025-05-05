@@ -173,8 +173,8 @@ def process_dataset(input_file, result_file, num_workers=16):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('--input_file', default="data/nq_hotpotqa_train/test_e5_ug.parquet", help='Path to input parquet file')
-    parser.add_argument('--result_file', default="results/zeroshot_answers.json", help='Path to save zeroshot answers JSON file')
+    parser.add_argument('--input_file', default="data/nq_hotpotqa_train/train_e5_ug.parquet", help='Path to input parquet file')
+    parser.add_argument('--result_file', default="data/Qwen_Qwen2.5-14B-Instruct-GPTQ-Int4/zeroshot_answers.json", help='Path to save zeroshot answers JSON file')
     parser.add_argument('--num_workers', type=int, default=16, help='Number of worker threads to use')
     
     args = parser.parse_args()
