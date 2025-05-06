@@ -6,7 +6,7 @@ export DATA_DIR=data/${data_name} # first download the data from https://hugging
 WAND_PROJECT="SearchAgent"
 
 export BASE_MODEL='Qwen/Qwen2.5-7B'
-export EXPERIMENT_NAME="U1-PPO-Qwen2.5-7B-VVVV1"
+export EXPERIMENT_NAME="U1-PPO-Qwen2.5-7B-VVVV2"
 export VLLM_ATTENTION_BACKEND=XFORMERS
 
 PYTHONUNBUFFERED=1 python3 -m verl.trainer.main_ppo \
@@ -53,15 +53,15 @@ PYTHONUNBUFFERED=1 python3 -m verl.trainer.main_ppo \
     trainer.n_gpus_per_node=4 \
     trainer.nnodes=1 \
     trainer.save_freq=50 \
-    trainer.test_freq=2000 \
+    trainer.test_freq=1500 \
     trainer.project_name=$WAND_PROJECT \
     trainer.experiment_name=$EXPERIMENT_NAME \
-    trainer.total_epochs=5 \
-    trainer.total_training_steps=2000 \
+    trainer.total_epochs=4 \
+    trainer.total_training_steps=1500 \
     trainer.default_hdfs_dir=null \
     trainer.default_local_dir=verl_checkpoints/$EXPERIMENT_NAME \
     max_turns=3 \
     +generator_llm="Qwen/Qwen2.5-14B-Instruct-GPTQ-Int4" \
-    retriever.url="http://127.0.0.1:4000/retrieve" \
+    retriever.url="http://127.0.0.1:3000/retrieve" \
     retriever.topk=3 \
     2>&1 | tee $EXPERIMENT_NAME.log

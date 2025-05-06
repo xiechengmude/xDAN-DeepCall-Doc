@@ -100,18 +100,39 @@ def process_question(row, lock, context_dir, topk):
         print(f"Error processing question: {str(e)}")
         return None, None, None, None, None
 
-def process_dataset(input_file, result_file, context_dir, num_workers=16, topk=12):
+def process_dataset(input_file, result_file, context_dir, num_workers=16, topk=12, random_seed=42, sampling_enabled=True):
+    # Set random seed for reproducibility
+    random.seed(random_seed)
+    
     # Load the dataset
     print(f"Loading dataset from {input_file}")
     df = pd.read_parquet(input_file)
+    
+    if sampling_enabled:
+        # Sample 3000 questions per data source if more than 3000 exist
+        sampled_dfs = []
+        for data_source in df['data_source'].unique():
+            source_df = df[df['data_source'] == data_source]
+            if len(source_df) > 3000:
+                print(f"Sampling 3000 questions from {data_source} (total: {len(source_df)})")
+                sampled_df = source_df.sample(n=3000, random_state=random_seed)
+            else:
+                print(f"Using all {len(source_df)} questions from {data_source}")
+                sampled_df = source_df
+            sampled_dfs.append(sampled_df)
+        
+        # Combine sampled dataframes
+        df = pd.concat(sampled_dfs, ignore_index=True)
+        print(f"Total questions after sampling: {len(df)}")
+    else:
+        print("Sampling disabled - using all questions")
     
     # Initialize counters and shared data structures
     total_questions = len(df)
     lock = threading.Lock()
     
     # Load previous results
-    # answers = load_previous_results(result_file)
-    answers = {}
+    answers = load_previous_results(result_file)
     
     # Initialize data source statistics
     data_source_stats = {}
@@ -148,13 +169,17 @@ def process_dataset(input_file, result_file, context_dir, num_workers=16, topk=1
     
     # Process remaining questions in parallel
     print(f"Processing remaining questions with {num_workers} workers...")
+    
+    # Create a list of tasks first
+    tasks = [(row, lock, context_dir, topk) for _, row in remaining_df.iterrows()]
+    print(f"Total tasks to process: {len(tasks)}")
+    
     with ThreadPoolExecutor(max_workers=num_workers) as executor:
         # Submit all tasks
-        futures = {executor.submit(process_question, row, lock, context_dir, topk): idx for idx, row in remaining_df.iterrows()}
-        print(f"Total futures submitted: {len(futures)}")
+        futures = {executor.submit(process_question, *task): idx for idx, task in enumerate(tasks)}
         
         # Process results as they complete
-        with tqdm(total=len(futures)) as pbar:
+        with tqdm(total=len(tasks)) as pbar:
             for future in as_completed(futures):
                 try:
                     question, answer, is_correct, is_em, data_source = future.result()
@@ -216,12 +241,12 @@ def process_dataset(input_file, result_file, context_dir, num_workers=16, topk=1
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--input_file', default="data/nq_hotpotqa_train/test_e5_ug.parquet", help='Path to input parquet file')
-    parser.add_argument('--result_file', default="results/search_r1.json", help='Path to save answers JSON file')
-    # parser.add_argument('--result_file', default="results/rag.json", help='Path to save answers JSON file')
-    parser.add_argument('--context_dir', default="data/search-r1", help='Directory containing context files')
-    # parser.add_argument('--context_dir', default="data/RAG_Retrieval", help='Directory containing context files')
+    parser.add_argument('--result_file', default="results/BM25_none.json", help='Path to save answers JSON file')
+    parser.add_argument('--context_dir', default="data/BM25/none_deepretrieval", help='Directory containing context files')
     parser.add_argument('--num_workers', type=int, default=16, help='Number of worker threads to use')
-    parser.add_argument('--topk', type=int, default=12, help='Number of context to use')
+    parser.add_argument('--topk', type=int, default=3, help='Number of context to use')
+    parser.add_argument('--random_seed', type=int, default=42, help='Random seed for reproducible sampling')
+    parser.add_argument('--sampling_enabled', action='store_true', help='Enable sampling of questions')
     
     args = parser.parse_args()
-    process_dataset(args.input_file, args.result_file, args.context_dir, args.num_workers, args.topk) 
+    process_dataset(args.input_file, args.result_file, args.context_dir, args.num_workers, args.topk, args.random_seed, True) 

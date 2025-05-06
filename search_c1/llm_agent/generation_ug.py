@@ -510,8 +510,9 @@ class LLMGenerationManager:
                         is_search.append(0)
                 else:
                     # Invalid action
-                    feedback = "My previous action is invalid. I should put my search query between <query> and </query> tags in JSON format. Let me try again."
-                    next_obs.append(f'\n<feedback>{feedback}</feedback>\n')
+                    # feedback = "My previous action is invalid. I should put my search query between <query> and </query> tags in JSON format. Let me try again."
+                    # next_obs.append(f'\n<feedback>{feedback}</feedback>\n')
+                    next_obs.append('')
                     dones.append(False)
                     valid_action.append(0)
                     is_search.append(0)
