@@ -5,6 +5,8 @@ import requests
 import json
 import argparse
 import os
+import sys
+sys.path.append('./')
 from generator_llms.query_rewrite import rewrite_query
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from tqdm import tqdm
