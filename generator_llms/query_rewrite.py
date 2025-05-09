@@ -4,14 +4,13 @@ import argparse
 import re
 
 INSTRUCTION = """
-You are a query rewriting expert. Your task is to create query terms for user query to find relevant literature in a massive corpus.
+You are a query rewriting expert. Your task is to create query terms for user query to find relevant literature in a Wikipedia corpus using BM25.
 """
 
 def format_prompt(user_query: str) -> str:
     """Format the prompt for the model using the same template as make_prefix."""
-    system_message = """You are a helpful assistant. You first thinks about the reasoning process in the mind and then provides the user with the answer."""
-    
-    user_message = INSTRUCTION + """\nShow your work in <think> </think> tags. Your final response must be in JSON format within <answer> </answer> tags. For example,
+    input_str = """<|im_start|>system\nYou are a helpful assistant. You first thinks about the reasoning process in the mind and then provides the user with the answer.<|im_end|>\n<|im_start|>user\n""" + INSTRUCTION
+    input_str += """\nShow your work in <think> </think> tags. Your final response must be in JSON format within <answer> </answer> tags. For example,
 <think>
 [thinking process]
 </think>
@@ -20,23 +19,28 @@ def format_prompt(user_query: str) -> str:
     "query": "...."
 } 
 </answer>. 
-Note: The query should use Boolean operators (AND, OR) and parentheses for grouping terms appropriately. You don't need to rewrite the query when the query is already good.
+Note: The query should use Boolean operators (AND, OR) and parentheses for grouping terms appropriately.
 
 Here's the user query:
-""" + user_query + """
+"""
+    input_str += user_query + """
 Assistant: Let me rewrite the query with reasoning. 
 <think>
 """
     
     return [
-        {"role": "system", "content": system_message},
-        {"role": "user", "content": user_message}
+        {"role": "system", "content": "You are a helpful assistant. You first thinks about the reasoning process in the mind and then provides the user with the answer."},
+        {"role": "user", "content": input_str}
     ]
 
 def extract_query(response_text: str) -> str:
     """Extract the rewritten query from the model's response."""
     try:
         # Find the last occurrence of <answer>...</answer>
+        if "<answer>" not in response_text:
+            response_text = "<answer>" + response_text
+        if "</answer>" not in response_text:
+            response_text = response_text + "</answer>"
         answer_pattern = r'<answer>(.*?)</answer>'
         matches = re.findall(answer_pattern, response_text, re.DOTALL)
         
@@ -45,8 +49,7 @@ def extract_query(response_text: str) -> str:
             answer_json = json.loads(matches[-1].strip())
             return answer_json['query']
         else:
-            print("No answer tags found in response")
-            return None
+            raise ValueError("No answer tags found in response")
     except Exception as e:
         raise ValueError(f"Failed to extract query from response: {e}")
 
@@ -64,7 +67,8 @@ def rewrite_query(query: str, rewriter_model: str, api_url: str = "http://localh
         }
     elif rewriter_model == "nq":
         payload = {
-            "model": "DeepRetrieval/DeepRetrieval-NQ-BM25-3B",
+            # "model": "DeepRetrieval/DeepRetrieval-NQ-BM25-3B",
+            "model": "/shared/rsaas/pj20/lmr_model/nq_serini_3b_continue/actor/global_step_1400",
             "messages": messages,
             "temperature": 0.7,
             "max_tokens": 512
@@ -85,19 +89,15 @@ def rewrite_query(query: str, rewriter_model: str, api_url: str = "http://localh
         
         # Extract the generated text from the response
         generated_text = result['choices'][0]['message']['content']
-        
+        # print(generated_text)
         # Extract the rewritten query
         rewritten_query = extract_query(generated_text)
-        if rewritten_query is None:
-            return query
         return rewritten_query
         
     except requests.exceptions.RequestException as e:
-        print(f"API request failed: {e}")
-        return query
+        raise Exception(f"API request failed: {e}")
     except Exception as e:
-        print(f"Failed to process response: {e}")
-        return query
+        raise Exception(f"Failed to process response: {e}")
 
 def main():
     parser = argparse.ArgumentParser(description="Query rewriting using vLLM API")

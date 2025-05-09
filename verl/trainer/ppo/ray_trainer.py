@@ -412,6 +412,15 @@ def compute_reward_metrics_utility(batch):
     return reward_metrics
 
 
+def compute_reward_metrics_generation(batch):
+    reward_tensor = batch.batch['token_level_scores'].sum(-1)
+
+    reward_metrics = {}
+    reward_metrics["reward/mean"] = torch.mean(reward_tensor).detach().item()
+    
+        
+    return reward_metrics
+
 def compute_timing_metrics(batch, timing_raw):
     response_info = _compute_response_info(batch)
     num_prompt_tokens = torch.sum(response_info['prompt_length']).item()
@@ -457,7 +466,10 @@ class RayPPOTrainer(object):
                  resource_pool_manager: ResourcePoolManager,
                  ray_worker_group_cls: RayWorkerGroup = RayWorkerGroup,
                  reward_fn=None,
-                 val_reward_fn=None):
+                 val_reward_fn=None,
+                 use_generation_score=True,
+                 use_utility_score=True
+                 ):
 
         # assert torch.cuda.is_available(), 'cuda must be available on driver'
 
@@ -477,6 +489,8 @@ class RayPPOTrainer(object):
         self.use_reference_policy = Role.RefPolicy in role_worker_mapping
         self.use_rm = Role.RewardModel in role_worker_mapping
         self.ray_worker_group_cls = ray_worker_group_cls
+        self.use_generation_score = use_generation_score
+        self.use_utility_score = use_utility_score
 
         # define KL control
         if self.use_reference_policy:
@@ -976,8 +990,14 @@ class RayPPOTrainer(object):
                             actor_output_metrics = reduce_metrics(actor_output.meta_info['metrics'])
                             metrics.update(actor_output_metrics)
                             
+                        if self.use_utility_score and not self.use_generation_score:
+                            reward_metrics = compute_reward_metrics_utility(batch)
+                        elif self.use_generation_score and not self.use_utility_score:
+                            reward_metrics = compute_reward_metrics_generation(batch)
+                        else:
+                            reward_metrics = compute_reward_metrics_rag(batch)
                             
-                        reward_metrics = compute_reward_metrics_rag(batch)
+                        # reward_metrics = compute_reward_metrics_rag(batch)
                         # reward_metrics = compute_reward_metrics_utility(batch)
                         metrics.update(reward_metrics)
 

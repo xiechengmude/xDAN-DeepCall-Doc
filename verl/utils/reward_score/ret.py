@@ -226,6 +226,19 @@ def check_answer_correct(answer, golden_answers):
     return answer_context_score
 
 
+def check_answer_span_in_context(context, golden_answers):
+    answer_context_score = answer_span_check(
+        prediction=context,
+        golden_answers=golden_answers
+    )
+    if answer_context_score == 0:
+        answer_context_score = 1 if check_if_context_contains_golden_answers(
+            context=context,
+            gold_answers=golden_answers
+        ) else 0
+    return answer_context_score
+
+
 def compute_score_rag(solution_str, ground_truth, zeroshot_answers, data_source, use_utility_score=True, use_generation_score=True):
     """
     Args:
@@ -234,8 +247,6 @@ def compute_score_rag(solution_str, ground_truth, zeroshot_answers, data_source,
         zeroshot_answers: dictionary containing cached zeroshot answers
     """
     
-    utility_score = 0
-    generation_score = 0
     
     question = ground_truth['question']
     golden_answers = ground_truth['target'].tolist()
@@ -254,63 +265,25 @@ def compute_score_rag(solution_str, ground_truth, zeroshot_answers, data_source,
             seen_docs.add(doc_key)
             context_with_info += f"Doc {doc_id} (Title: {title})\n{text}\n\n"
             doc_id += 1
-        
-    if use_utility_score:
-        if question in zeroshot_answers[data_source]:
-            answer_zeroshot = zeroshot_answers[data_source][question]['answer']
-            answer_zeroshot_score = zeroshot_answers[data_source][question]['score']
-        # answer_zeroshot_score = check_answer_correct(answer=answer_zeroshot, golden_answers=golden_answers)
-        else:
-            print(f"[Warning] No zeroshot answer found for question: {question}")
-            answer_zeroshot = generate_answer_zero_shot(prompt=question)
-            answer_zeroshot_score = check_answer_correct(answer=answer_zeroshot, golden_answers=golden_answers)
     
-    answer_context = generate_answer(prompt=question, context=context_with_info)
-    answer_context_score = check_answer_correct(answer=answer_context, golden_answers=golden_answers)
-    generation_score = answer_context_score
-        
-    if use_utility_score:
-        utility_score = answer_context_score - answer_zeroshot_score
     
-    if use_generation_score and use_utility_score:
-        score = utility_score + generation_score
-    elif use_generation_score:
-        score = generation_score
-    elif use_utility_score:
-        score = utility_score
-    else:
-        raise ValueError("use_generation_score and use_utility_score cannot both be False")
+    retrieval_score = check_answer_span_in_context(
+        context=context_with_info,
+        golden_answers=golden_answers
+    )
     
     do_print = random.randint(1, 16) == 1
-       
-    if use_utility_score:
-        if do_print:
-            print(f"--------------------------------")
-            print(f"Question: {question}")
-            print(f"Golden answers: {ground_truth['target']}")
-            print(f"Extracted answer: {answer_context}")
-            print(f"Extracted zeroshot (RAG) answer: {answer_zeroshot}")
-            print(f"Answer context score: {answer_context_score}")
-            print(f"Answer zeroshot (RAG) score: {answer_zeroshot_score}")
-            print(f"Utility score: {utility_score}")
-            print(f"Generation score: {generation_score}")
-            print(f"Extracted doc_info: {context_with_info}")
-            print(f"Response string: {response_str}")
-            
-    else:
-        if do_print:
-            print(f"--------------------------------")
-            print(f"Question: {question}")
-            print(f"Golden answers: {ground_truth['target']}")
-            print(f"Extracted answer: {answer_context}")
-            print(f"Generation score: {generation_score}")
-            print(f"Extracted doc_info: {context_with_info}")
-            print(f"Response string: {response_str}")
     
-    if use_utility_score:
-        return score, answer_zeroshot, answer_zeroshot_score
-    else:
-        return score, None, None
+    if do_print:
+        print(f"--------------------------------")
+        print(f"Question: {question}")
+        print(f"Golden answers: {ground_truth['target']}")
+        print(f"Extracted doc_info: {context_with_info}")
+        print(f"Retrieval score: {retrieval_score}")
+        print(f"Solution string: {solution_str}")
+        
+    return retrieval_score, None, None
+
 
 
 def output_sequence(solution_str, ground_truth):

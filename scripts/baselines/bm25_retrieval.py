@@ -61,15 +61,16 @@ def main():
     parser.add_argument("--rewriter", required=True, help="Path to the rewriter model.")
     parser.add_argument("--output_dir", required=True, default="data/BM25", help="Directory to store output JSON files.")
     parser.add_argument("--endpoint", required=True, help="Retrieval API endpoint URL (e.g., http://127.0.0.1:3000/retrieve)")
-    parser.add_argument("--num_workers", type=int, default=12, help="Number of worker threads for parallel processing")
+    parser.add_argument("--num_workers", type=int, default=20, help="Number of worker threads for parallel processing")
     args = parser.parse_args()
 
     args.output_dir = os.path.join(args.output_dir, args.rewriter+"_deepretrieval")
     os.makedirs(args.output_dir, exist_ok=True)
 
     df = pd.read_parquet(args.input_parquet)
-    data_sources = ['nq', 'triviaqa', 'popqa', 'hotpotqa', '2wikimultihopqa', 'musique', 'bamboogle']
-
+    # data_sources = ['nq', 'triviaqa', 'popqa', 'hotpotqa', '2wikimultihopqa', 'musique', 'bamboogle']
+    data_sources = ['nq', 'hotpotqa']
+    
     for data_source in data_sources:
         print(f"[INFO] Processing: {data_source}")
         retrieval_info = {}

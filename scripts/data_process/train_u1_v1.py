@@ -31,10 +31,8 @@ def make_prefix(dp, retriever):
 If the searched results are enough, you will use <search_complete>True</search_complete> to indicate that you have gathered enough information for the generation model to produce an answer.
 If the searched results are not enough, you will go through a loop of <query> -> <information> -> <important_info> -> <search_complete> -> <query> (if not complete) ..., to help the generation model to generate a better answer with more relevant information searched.
 You should show the search query between <query> and </query> in JSON format.
-Based on the search query, we will return the top searched results between <information> and </information>. You need to put the doc ids of the important documents (up to 3 documents, within the current information window) between <important_info> and </important_info> (e.g., <important_info>[1, 4]</important_info>).
-A search query MUST be followed by a <search_complete> tag if the search is not complete.
+Based on the search query, we will return the top searched results between <information> and </information>. You need to put the doc ids (combination of 1, 2, 3) of the important documents between <important_info> and </important_info> (e.g., <important_info>[1, 2]</important_info>).
 After reviewing the information, you must decide whether to continue searching with a new query or indicate that the search is complete. If you need more information, use <search_complete>False</search_complete> to indicate you want to continue searching with a better query. Otherwise, use <search_complete>True</search_complete> to terminate the search.
-During the process, you can add reasoning process within <think></think> tag whenever you want. Note: Only the important information would be used for the generation model to produce an answer.
 """
 
     if retriever == "bm25":
@@ -61,7 +59,7 @@ If the initial searched results are not enough to produce an answer, you should 
 } 
 </query>
 <information>
-[top searched results based on the above search query]
+[top 3 searched results]
 </information>
 <important_info>
 [doc ids]
@@ -74,11 +72,7 @@ False
     "query": "[search query]"
 }
 </query>
-...... (can be several turns until <search_complete> is True)
-
-<search_complete>
-True
-</search_complete>
+...... (can be several turns)
 
 Now, start the loop with the following question and initial searched results:
 """
