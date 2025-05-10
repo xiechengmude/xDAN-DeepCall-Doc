@@ -4,8 +4,8 @@ pwd
 
 ## process multiple dataset search format train file
 DATA=nq,hotpotqa
-python scripts/data_process/train_u1.py --local_dir $LOCAL_DIR --data_sources $DATA --retriever e5
+python scripts/data_process/train_u1_v6.py --local_dir $LOCAL_DIR --data_sources $DATA --retriever e5
 
 ## process multiple dataset search format test file
 DATA=nq,triviaqa,popqa,hotpotqa,2wikimultihopqa,musique,bamboogle
-python scripts/data_process/test_u1.py --local_dir $LOCAL_DIR --data_sources $DATA --retriever e5
+python scripts/data_process/test_u1_v6.py --local_dir $LOCAL_DIR --data_sources $DATA --retriever e5

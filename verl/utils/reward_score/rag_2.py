@@ -101,8 +101,8 @@ def extract_titles_and_texts(solution_str):
                 
                 # Extract all numbers from the content
                 numbers = re.findall(r'\d+', content)
-                # Only keep IDs 1, 2, and 3
-                important_ids = [int(num) for num in numbers if int(num) in [1, 2, 3]]
+                # Convert all numbers to integers
+                important_ids = [int(num) for num in numbers if int(num) in [1, 2, 3, 4, 5, 6, 7, 8]]
                 
                 # Remove duplicates while preserving order
                 important_ids = list(dict.fromkeys(important_ids))
@@ -152,13 +152,25 @@ def extract_titles_and_texts(solution_str):
                 docs_in_block = []
                 try:
                     # Extract individual documents from the info block
-                    doc_pattern = re.compile(r'Doc\s*(\d+)\s*\(Title:\s*"?([^")]+)"?\)\s*(.*?)(?=Doc\s*\d+\s*\(Title:|$)', re.DOTALL)
+                    # Basic pattern that captures:
+                    # - Document number
+                    # - Title (with or without quotes)
+                    # - Content
+                    # Handles:
+                    # - Optional spaces between Doc and number
+                    # - Optional spaces around Title:
+                    # - Case insensitive
+                    doc_pattern = re.compile(
+                        r'Doc\s*(\d+)\s*\(\s*Title\s*:\s*"?([^")]+)"?\)\s*(.*?)(?=Doc\s*\d+\s*\(\s*Title\s*:|$)',
+                        re.DOTALL | re.IGNORECASE
+                    )
                     
                     for match in doc_pattern.finditer(info_content):
                         try:
                             doc_id = int(match.group(1))
                             title = match.group(2).strip()
                             text = match.group(3).strip()
+                            # print(f"Debug: Parsed document - ID: {doc_id}, Title: {title}")
                             docs_in_block.append((doc_id, title, text))
                         except (IndexError, ValueError) as e:
                             print(f"Warning: Error parsing document: {str(e)}")
@@ -169,8 +181,11 @@ def extract_titles_and_texts(solution_str):
                 
                 # Filter by important_ids
                 try:
+                    # print(f"Debug: Filtering documents. Important IDs: {important_ids}")
+                    # print(f"Debug: Available document IDs: {[doc_id for doc_id, _, _ in docs_in_block]}")
                     filtered_docs = [(title, text) for doc_id, title, text in docs_in_block 
                                     if doc_id in important_ids]
+                    # print(f"Debug: Filtered documents count: {len(filtered_docs)}")
                 except Exception as e:
                     print(f"Warning: Error filtering documents: {str(e)}")
                     filtered_docs = []
@@ -187,7 +202,10 @@ def extract_titles_and_texts(solution_str):
                 info_content = info_block['content']
                 try:
                     # Extract individual documents from the info block
-                    doc_pattern = re.compile(r'Doc\s*(\d+)\s*\(Title:\s*"?([^")]+)"?\)\s*(.*?)(?=Doc\s*\d+\s*\(Title:|$)', re.DOTALL)
+                    doc_pattern = re.compile(
+                        r'Doc\s*(\d+)\s*\(\s*Title\s*:\s*"?([^")]+)"?\)\s*(.*?)(?=Doc\s*\d+\s*\(\s*Title\s*:|$)',
+                        re.DOTALL | re.IGNORECASE
+                    )
                     
                     for match in doc_pattern.finditer(info_content):
                         try:

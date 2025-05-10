@@ -7,7 +7,7 @@ WAND_PROJECT="SearchAgent"
 
 # export BASE_MODEL='Qwen/Qwen2.5-7B'
 export BASE_MODEL='Qwen/Qwen2.5-7B-Instruct-1M'
-export EXPERIMENT_NAME="Search-U1-PPO-Qwen2.5-7B-Instruct-1M-V6"
+export EXPERIMENT_NAME="Search-U1-PPO-Qwen2.5-7B-Instruct-1M-V7"
 export VLLM_ATTENTION_BACKEND=XFORMERS
 
 PYTHONUNBUFFERED=1 python3 -m verl.trainer.main_ppo \
@@ -54,7 +54,7 @@ PYTHONUNBUFFERED=1 python3 -m verl.trainer.main_ppo \
     trainer.default_hdfs_dir=null \
     trainer.n_gpus_per_node=5 \
     trainer.nnodes=1 \
-    trainer.save_freq=150 \
+    trainer.save_freq=50 \
     trainer.test_freq=1500 \
     trainer.project_name=$WAND_PROJECT \
     trainer.experiment_name=$EXPERIMENT_NAME \

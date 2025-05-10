@@ -1,4 +1,4 @@
-# Search-U1
+# s3
 
 
 
@@ -21,4 +21,10 @@ bash scripts/baselines/deepretrieval.sh # run DeepRetrieval Query Rewriting + Re
 ```bash
 bash retrieval_launch.sh # deploy e5 retriever
 bash scripts/baselines/search_r1.sh # run Search-R1
+```
+
+**IRCoT**
+```bash
+bash retrieval_launch.sh # deploy e5 retriever
+python scripts/baselines/ircot.py
 ```
