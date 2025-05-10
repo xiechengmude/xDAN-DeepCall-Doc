@@ -2,7 +2,8 @@ import requests
 import pdb
 import sys
 sys.path.append('./')
-from generator_llms.claude_api import get_claude_response as get_llm_response
+# # from generator_llms.claude_api import get_claude_response as get_llm_response
+# from generator_llms.local_inst import call_llm as get_llm_response
 import argparse
 import pandas as pd
 import json
@@ -10,6 +11,46 @@ from tqdm import tqdm
 import os
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import threading
+import re
+
+
+def call_llm(prompt: str) -> str:
+    """
+    Call the LLM with a simple prompt and get a short response.
+    """
+    # Prepare the payload for the API call
+    headers = {"Content-Type": "application/json"}
+    
+    # Format as chat messages
+    messages = [
+        {"role": "user", "content": prompt}
+    ]
+    MODEL = "Qwen/Qwen2.5-14B-Instruct-GPTQ-Int4"
+
+    payload = {
+        "model": MODEL,
+        "messages": messages,
+        "temperature": 0.7,
+        "top_p": 0.95,
+        "max_tokens": 2048,
+        "frequency_penalty": 0.0,
+        "presence_penalty": 0.0    
+    }
+    
+    try:
+        response = requests.post("http://localhost:8000/v1/chat/completions", headers=headers, json=payload)
+        response.raise_for_status()
+        res = response.json()
+        
+        if "choices" not in res or not res["choices"]:
+            raise ValueError("Invalid response from LLM")
+            
+        # Extract and return the generated text
+        return res["choices"][0]["message"]["content"].strip()
+        
+    except Exception as e:
+        print(f"Error generating answer: {e}")
+        return ""
 
 def retrieve(query: str, endpoint: str):
     """
@@ -47,7 +88,7 @@ def retrieve(query: str, endpoint: str):
     return _passages2string(results[0])
 
 
-def ircot_answer(question, endpoint, llm_name, max_steps=4):
+def ircot_answer(question, endpoint, max_steps=4):
     """
     Answer a question using the IRCoT method (Interleaved Retrieval with Chain-of-Thought),
     and return both the reasoning steps, per-step retrievals, and full retrieval context.
@@ -82,21 +123,22 @@ def ircot_answer(question, endpoint, llm_name, max_steps=4):
         prompt = build_prompt(question, retrieved_context, cot_chain)
 
         # Generate the next step in the chain of thought
-        next_cot = get_llm_response(prompt, llm=llm_name).strip()
+        next_cot = call_llm(prompt).strip()
         cot_chain.append(next_cot)
+        query_only = re.sub(r"<search_complete>.*?</search_complete>", "", next_cot, flags=re.IGNORECASE).strip()
 
         # Stop condition
-        if "the answer is" in next_cot.lower():
+        if "<search_complete>yes</search_complete>" in next_cot.lower():
             break
-
+        
         # Retrieve based on the latest reasoning step
-        new_context = retrieve(next_cot, endpoint)
+        new_context = retrieve(query_only, endpoint)
         retrievals.append({
-            "query": next_cot,
+            "query": query_only,
             "context": new_context
         })
         all_context_blocks.append(new_context)
-
+        
         # Add to accumulated context
         retrieved_context += "\n" + new_context
 
@@ -111,29 +153,37 @@ def ircot_answer(question, endpoint, llm_name, max_steps=4):
 def build_prompt(question, context, cot_chain):
     """
     Construct a prompt for the LLM based on the question, retrieved evidence, and previous reasoning steps.
-    
+
     Args:
         question (str): The original input question.
         context (str): Retrieved text context.
         cot_chain (list): List of reasoning steps so far.
-        
+
     Returns:
         str: A prompt formatted for the LLM.
     """
     prompt = f"Question: {question}\n\n"
+
     if context:
-        prompt += f"Context:\n{context}\n"
+        prompt += "Context:\n" + context.strip() + "\n"
+
     if cot_chain:
         prompt += "\nChain of Thought:\n"
         for i, step in enumerate(cot_chain, 1):
-            prompt += f"{i}. {step}\n"
+            prompt += f"{i}. {step.strip()}\n"
 
     prompt += (
-        "\nPlease continue reasoning with the next step. "
-        "Reason step by step and only provide the final answer if you are confident. "
-        "If you have reached a conclusion, end your reasoning with 'The answer is ...'."
+        "\nPlease reason through the problem step by step based on the given context. "
+        "Only provide the final answer if you are confident and have sufficient information. "
+        "Otherwise, continue with intermediate reasoning steps.\n\n"
+        "At the end of your response, write one of the following tags to indicate whether further information is needed:\n"
+        "    <search_complete>Yes</search_complete>   if no more information is needed.\n"
+        "    <search_complete>No</search_complete>    if more information is needed.\n\n"
+        "Now continue reasoning:"
     )
+
     return prompt
+
 
 
 def load_previous_results(filepath):
@@ -146,7 +196,7 @@ def save_results(result_dict, output_file):
     with open(output_file, "w", encoding="utf-8") as f:
         json.dump(result_dict, f, ensure_ascii=False, indent=4)
 
-def process_single_question(row, endpoint, llm_name):
+def process_single_question(row, endpoint):
     try:
         question = row["question"]
         golden_answers = row.get("golden_answers", [])
@@ -154,7 +204,7 @@ def process_single_question(row, endpoint, llm_name):
         extra_info = row.get("extra_info", {})
         data_source = extra_info.get("source", None) if isinstance(extra_info, dict) else None
 
-        ircot_result = ircot_answer(question, endpoint, llm_name)
+        ircot_result = ircot_answer(question, endpoint)
 
         return question, {
             "golden_answers": golden_answers,
@@ -170,14 +220,13 @@ def process_single_question(row, endpoint, llm_name):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument('--input_file', default="data/nq_hotpotqa_train/test_e5_ug.parquet", help='Path to input parquet file')
-    parser.add_argument('--llm', type=str, choices=['sonnet', 'haiku'], default='sonnet')
     parser.add_argument("--endpoint", default="http://127.0.0.1:3000/retrieve", help="Retrieval API endpoint URL")
-    parser.add_argument('--output_file', default="data/ircot/results_sonnet.json", help="Path to save output JSON")
+    parser.add_argument('--output_file', default="data/ircot/results.json", help="Path to save output JSON")
     parser.add_argument('--num_workers', type=int, default=8, help="Number of parallel workers")
     args = parser.parse_args()
 
     os.makedirs(os.path.dirname(args.output_file), exist_ok=True)
-    
+
     # Load input and previous results
     df = pd.read_parquet(args.input_file)
     results = load_previous_results(args.output_file)
@@ -190,7 +239,7 @@ if __name__ == "__main__":
 
     with ThreadPoolExecutor(max_workers=args.num_workers) as executor:
         futures = {
-            executor.submit(process_single_question, row, args.endpoint, args.llm): idx
+            executor.submit(process_single_question, row, args.endpoint): idx
             for idx, row in df.iterrows()
         }
 
