@@ -20,7 +20,7 @@ import torch
 # from verl.utils.reward_score import rag, ppl, rag_new
 # from verl.utils.reward_score import rag_new
 from verl.utils.reward_score import rag_2
-
+# from verl.utils.reward_score import ret
 from verl.trainer.ppo.ray_trainer import RayPPOTrainer
 import re
 import os
@@ -31,20 +31,24 @@ import random
 
 from verl.utils.reward_score.rag_2 import output_sequence
 
+USE_UTILITY_SCORE = True
+USE_GENERATION_SCORE = True
+
 
 def _select_rm_score_fn(data_source):
     if data_source in ['nq', 'triviaqa', 'popqa', 'hotpotqa', '2wikimultihopqa', 'musique', 'bamboogle']:
         # return rag.compute_score_rag
         return rag_2.compute_score_rag
+        # return ret.compute_score_rag
     else:
         raise NotImplementedError
 
 
 class RewardManager():
     """The reward manager.
-    """
+    """#data/Qwen_Qwen2.5-14B-Instruct-GPTQ-Int4/train/zeroshot_answers.json
 
-    def __init__(self, tokenizer, num_examine, format_score=0., zeroshot_cache_file="data/Qwen_Qwen2.5-14B-Instruct-GPTQ-Int4/train/zeroshot_answers.json", val_only=False) -> None:
+    def __init__(self, tokenizer, num_examine, format_score=0., zeroshot_cache_file="data/rag_cache/rag_cache.json", val_only=False) -> None:
         self.tokenizer = tokenizer
         self.num_examine = num_examine  # the number of batches of decoded responses to print to the console
         self.format_score = format_score
@@ -53,7 +57,7 @@ class RewardManager():
         self.val_only = val_only
         
         # Add new cache directory for output sequences
-        self.output_sequences_dir = os.path.join("data", "output_sequences_v2")
+        self.output_sequences_dir = os.path.join("data", "output_sequences_v3")
         os.makedirs(self.output_sequences_dir, exist_ok=True)
         self.output_sequences_lock = threading.Lock()
         self.output_sequences_data = {}
@@ -125,7 +129,9 @@ class RewardManager():
                     solution_str=sequences_str, 
                     ground_truth=ground_truth, 
                     zeroshot_answers=self.zeroshot_answers,
-                    data_source=data_source
+                    data_source=data_source,
+                    use_utility_score=USE_UTILITY_SCORE,
+                    use_generation_score=USE_GENERATION_SCORE
                     # val_only=self.val_only
                 )
                 
@@ -290,6 +296,8 @@ def main_task(config):
                             ray_worker_group_cls=ray_worker_group_cls,
                             reward_fn=reward_fn,
                             val_reward_fn=val_reward_fn,
+                            use_generation_score=USE_GENERATION_SCORE,
+                            use_utility_score=USE_UTILITY_SCORE
                             )
     trainer.init_workers()
     trainer.fit()

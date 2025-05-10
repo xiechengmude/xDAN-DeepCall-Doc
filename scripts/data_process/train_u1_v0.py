@@ -29,12 +29,10 @@ def make_prefix(dp, retriever):
     # input_str = """<|im_start|>system\nA conversation between User and Assistant. The User asks a question, and the Assistant solves it.<|im_end|>\n<|im_start|>user\n"""
     input_str = """You are a search copilot for the generation model. Based on a user's query and initial searched results, you will first determine if the searched results are enough to produce an answer.
 If the searched results are enough, you will use <search_complete>True</search_complete> to indicate that you have gathered enough information for the generation model to produce an answer.
-If the searched results are not enough, you will go through a loop of <query> -> <information> -> <important_info> -> <search_complete> -> <query> (if not complete) ..., to help the generation model to generate a better answer with more relevant information searched.
-You should show the search query between <query> and </query> in JSON format.
-Based on the search query, we will return the top searched results between <information> and </information>. You need to put the doc ids of the important documents (up to 3 documents, within the current information window) between <important_info> and </important_info> (e.g., <important_info>[1, 4]</important_info>).
-A search query MUST be followed by a <search_complete> tag if the search is not complete.
-After reviewing the information, you must decide whether to continue searching with a new query or indicate that the search is complete. If you need more information, use <search_complete>False</search_complete> to indicate you want to continue searching with a better query. Otherwise, use <search_complete>True</search_complete> to terminate the search.
-During the process, you can add reasoning process within <think></think> tag whenever you want. Note: Only the important information would be used for the generation model to produce an answer.
+If the searched results are not enough, you will go through a loop of <think> -> <query> -> <information> -> <think> -> <important_info> -> <search_complete> -> <query> (if not complete) ..., to help the generation model to generate a better answer with more relevant information searched.
+You should show your thinking process between <think> and </think>. You should show the search query between <query> and </query> in JSON format.
+Based on the search query, we will return the top searched results between <information> and </information>. You need to first think (<think>) on the retrieved information and put the doc ids (combination of 1, 2, 3) of the important documents between <important_info> and </important_info> (e.g., <important_info>[1, 2]</important_info>).
+After reviewing the information, you must decide whether to continue searching with a new query or indicate that the search is complete. If you need more information, formulate a new search query OR use <search_complete>False</search_complete> to indicate you want to continue searching with a better query. If you have sufficient information, use <search_complete>True</search_complete> to indicate that you have gathered enough information for the generation model to produce an answer.
 """
 
     if retriever == "bm25":
@@ -49,20 +47,26 @@ For a question and initial searched results:
 [initial searched results]
 </information>
 
-If the initial searched results are enough to produce an answer, you should output:
+If the initial searched results are enough to produce an answer:
 <search_complete>
 True
 </search_complete>
 
-If the initial searched results are not enough to produce an answer, you should output:
+If the initial searched results are not enough to produce an answer:
+<think>
+[thinking process]
+</think>
 <query>
 {
     "query": "[search query]"
 } 
 </query>
 <information>
-[top searched results based on the above search query]
+[top searched results]
 </information>
+<think>
+[analyze the search results]
+</think>
 <important_info>
 [doc ids]
 </important_info>
@@ -74,8 +78,7 @@ False
     "query": "[search query]"
 }
 </query>
-...... (can be several turns until <search_complete> is True)
-
+...... (maybe several turns)
 <search_complete>
 True
 </search_complete>
@@ -101,24 +104,28 @@ if __name__ == '__main__':
     parser.add_argument('--data_sources', default='nq')
     parser.add_argument('--retriever', default="bm25")
     parser.add_argument('--initial_searched_results_dir', default="data/RAG_Retrieval/train")
-    parser.add_argument('--rag_cache_path', default="data/rag_cache/rag_cache.json")
     args = parser.parse_args()
 
-    # Load RAG cache
-    rag_cache = json.load(open(args.rag_cache_path))
-    
     # data_source = 'nq'
     data_sources = args.data_sources.split(',')
     all_dataset = []
 
     for data_source in data_sources:
+
         dataset = datasets.load_dataset('RUC-NLPIR/FlashRAG_datasets', data_source)
+
         train_dataset = dataset['train']
         
         initial_searched_results = json.load(open(os.path.join(args.initial_searched_results_dir, f'{data_source}_output_sequences.json')))
 
+        # add a row to each data item that represents a unique id
         def make_map_fn(split):
+
             def process_fn(example, idx):
+                
+                if "yes" in example['golden_answers'] or "no" in example['golden_answers'] or "true" in example['golden_answers'] or "false" in example['golden_answers'] or "Yes" in example['golden_answers'] or "No" in example['golden_answers'] or "True" in example['golden_answers'] or "False" in example['golden_answers']:
+                    return None
+                
                 example['question'] = example['question'].strip()
                 if example['question'][-1] != '?':
                     example['question'] += '?'
@@ -151,25 +158,6 @@ if __name__ == '__main__':
 
             return process_fn
 
-        def filter_fn(example):
-            # Filter out yes/no answers
-            if any(word in example['golden_answers'] for word in ['yes', 'no', 'true', 'false', 'Yes', 'No', 'True', 'False']):
-                return False
-            
-            # Clean question for RAG cache check
-            question = example['question'].strip()
-            if question[-1] != '?':
-                question += '?'
-            
-            # Filter out RAG cache examples with score 1
-            if data_source in rag_cache and question in rag_cache[data_source]:
-                if rag_cache[data_source][question]['score'] == 1:
-                    return False
-            
-            return True
-
-        # First filter, then map
-        train_dataset = train_dataset.filter(filter_fn)
         train_dataset = train_dataset.map(function=make_map_fn('train'), with_indices=True)
         all_dataset.append(train_dataset)
 
@@ -181,4 +169,5 @@ if __name__ == '__main__':
 
     if hdfs_dir is not None:
         makedirs(hdfs_dir)
+
         copy(src=local_dir, dst=hdfs_dir)

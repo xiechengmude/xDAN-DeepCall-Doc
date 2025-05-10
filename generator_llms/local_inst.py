@@ -218,6 +218,46 @@ def check_if_response_is_correct_llm(response: str, gold_answers: list[str]) -> 
         else:
             return False
 
+def check_if_context_contains_golden_answers(context: str, gold_answers: list[str]) -> bool:
+    """
+    Check if any of the golden answers are semantically included in the context using soft matching.
+    
+    Args:
+        context: The context to check
+        gold_answers: List of golden answers to look for
+        
+    Returns:
+        bool: True if any golden answer is semantically found in the context, False otherwise
+    """
+    prompt = f"""Please analyze the following context and determine if it contains information that matches or is semantically equivalent to any of the golden answers.
+
+Context:
+{context}
+
+Golden answers: {str(gold_answers)}
+
+Important instructions:
+1. Look for equivalent information even if worded differently
+2. Answer with just 'yes' if you find any relevant match, or 'no' if none of the golden answers are present in any form
+
+Please directly answer with 'yes' or 'no'."""
+    
+    yes_or_no = call_llm(prompt)
+    
+    if "yes" in yes_or_no.lower():
+        return True
+    elif "no" in yes_or_no.lower():
+        return False
+    else:
+        # If first attempt didn't give clear yes/no, try one more time
+        yes_or_no = call_llm(prompt)
+        if "yes" in yes_or_no.lower():
+            return True
+        elif "no" in yes_or_no.lower():
+            return False
+        else:
+            return False
+
 def generate_answer_with_semaphore(context: str, prompt: str) -> str:
     """
     Generate an answer with rate limiting using a semaphore.

@@ -104,10 +104,14 @@ class LLMGenerationManager:
         )
 
         # Ensure responses end with </query> tag if it exists
-        responses_str = [resp.split('</query>')[0] + '</query>'
-                 if '</query>' in resp 
-                 else resp
-                 for resp in responses_str]
+        new_responses_str = []
+        for resp in responses_str:
+            if '</query>' in resp:
+                resp = resp.split('</query>')[0] + '</query>'
+                if '<query>' not in resp:
+                    resp = '<query>\n' + resp
+            new_responses_str.append(resp)
+        responses_str = new_responses_str
 
         # Extract query information
         queries = []
@@ -510,9 +514,9 @@ class LLMGenerationManager:
                         is_search.append(0)
                 else:
                     # Invalid action
-                    # feedback = "My previous action is invalid. I should put my search query between <query> and </query> tags in JSON format. Let me try again."
-                    # next_obs.append(f'\n<feedback>{feedback}</feedback>\n')
-                    next_obs.append('')
+                    feedback = "\n\nThe information is not enough to answer the question. Let me dive deeper by generating a brand new search query between <query> and </query> tags in JSON format:\n<query>\n"
+                    next_obs.append(feedback)
+                    # next_obs.append('')
                     dones.append(False)
                     valid_action.append(0)
                     is_search.append(0)
@@ -597,24 +601,25 @@ class LLMGenerationManager:
                                     elif type(content) == str:
                                         content = content
                                     else:
-                                        content = ''
+                                        print(f"Error in parsing query content from JSON: {query_text}")
+                                        content = query_text
                                 except:
                                     print(f"Error in parsing query: {query_text}")
-                                    content = ''
+                                    content = query_text
                                     
                                 action = "search"
                             else:
-                                content = ''
-                                action = None
+                                content = query_text
+                                action = "search"
                         except:
                             print(f"Error in json parsing: {json_data}")
-                            content = ''
-                            action = None
+                            content = query_text
+                            action = "search"
                             
                     except json.JSONDecodeError:
-                        # Fallback to regex pattern for non-JSON format
-                        content = ''
-                        action = None
+                        # If not valid JSON, try to use the text directly
+                        content = query_text
+                        action = "search"
                         
                 else:
                     content = ''

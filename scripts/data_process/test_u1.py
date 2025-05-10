@@ -44,11 +44,12 @@ def make_prefix(dp, retriever):
     # input_str = """<|im_start|>system\nA conversation between User and Assistant. The User asks a question, and the Assistant solves it.<|im_end|>\n<|im_start|>user\n"""
     input_str = """You are a search copilot for the generation model. Based on a user's query and initial searched results, you will first determine if the searched results are enough to produce an answer.
 If the searched results are enough, you will use <search_complete>True</search_complete> to indicate that you have gathered enough information for the generation model to produce an answer.
-If the searched results are not enough, you will go through a loop of <think> -> <query> -> <information> -> <think> -> <important_info> -> <search_complete> -> <query> (if not complete) ..., to help the generation model to generate a better answer with more relevant information searched.
-You should show your thinking process between <think> and </think>. You should show the search query between <query> and </query> in JSON format.
-Based on the search query, we will return the top searched results between <information> and </information>. You need to first think (<think>) on the retrieved information and put the doc ids (combination of 1, 2, 3) of the important documents between <important_info> and </important_info> (e.g., <important_info>[1, 2]</important_info>).
-After reviewing the information, you must decide whether to continue searching with a new query or indicate that the search is complete. If you need more information, formulate a new search query OR use <search_complete>False</search_complete> to indicate you want to continue searching with a better query. If you have sufficient information, use <search_complete>True</search_complete> to indicate that you have gathered enough information for the generation model to produce an answer.
-Only the documents selected by the ids in <important_info> will be sent to the generation model to produce an answer.
+If the searched results are not enough, you will go through a loop of <query> -> <information> -> <important_info> -> <search_complete> -> <query> (if not complete) ..., to help the generation model to generate a better answer with more relevant information searched.
+You should show the search query between <query> and </query> in JSON format.
+Based on the search query, we will return the top searched results between <information> and </information>. You need to put the doc ids of the important documents (up to 3 documents, within the current information window) between <important_info> and </important_info> (e.g., <important_info>[1, 4]</important_info>).
+A search query MUST be followed by a <search_complete> tag if the search is not complete.
+After reviewing the information, you must decide whether to continue searching with a new query or indicate that the search is complete. If you need more information, use <search_complete>False</search_complete> to indicate you want to continue searching with a better query. Otherwise, use <search_complete>True</search_complete> to terminate the search.
+During the process, you can add reasoning process within <think></think> tag whenever you want. Note: Only the important information would be used for the generation model to produce an answer.
 """
 
     if retriever == "bm25":
@@ -63,38 +64,20 @@ For a question and initial searched results:
 [initial searched results]
 </information>
 
-If the initial searched results are enough to produce an answer:
-<think>
-[thinking process]
-</think>
-<important_info>
-[doc ids]
-</important_info>
+If the initial searched results are enough to produce an answer, you should output:
 <search_complete>
 True
 </search_complete>
 
-If the initial searched results are not enough to produce an answer:
-<think>
-[thinking process]
-</think>
-<important_info>
-[doc ids]
-</important_info>
-<search_complete>
-False
-</search_complete>
+If the initial searched results are not enough to produce an answer, you should output:
 <query>
 {
     "query": "[search query]"
 } 
 </query>
 <information>
-[top searched results]
+[top searched results based on the above search query]
 </information>
-<think>
-[analyze the search results]
-</think>
 <important_info>
 [doc ids]
 </important_info>
@@ -106,7 +89,7 @@ False
     "query": "[search query]"
 }
 </query>
-...... (maybe several turns)
+...... (can be several turns until <search_complete> is True)
 
 <search_complete>
 True
