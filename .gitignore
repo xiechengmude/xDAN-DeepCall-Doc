@@ -137,3 +137,5 @@ results
 
 results_
 sft_model
+
+*.nfs*
