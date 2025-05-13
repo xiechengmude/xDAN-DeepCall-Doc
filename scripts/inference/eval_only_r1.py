@@ -149,7 +149,7 @@ def evaluate_results(context_dir: str, num_workers: int = 16, random_seed: int =
         print(f"EM correct answers: {source_stats['em_correct']} ({source_stats['em_accuracy']:.2%})")
     
     # Save results
-    output_file = os.path.join(os.path.dirname(context_dir), "results", "r1_3b_eval_stats.json")
+    output_file = os.path.join(os.path.dirname(context_dir), "results", "r1_no_search_eval_stats.json")
     os.makedirs(os.path.dirname(output_file), exist_ok=True)
     with open(output_file, 'w') as f:
         json.dump(stats, f, indent=2)
@@ -157,8 +157,9 @@ def evaluate_results(context_dir: str, num_workers: int = 16, random_seed: int =
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument('--context_dir', default="/home/pj20/server-04/search-c1/data/output_sequences_r1_3b",
-                      help='Directory containing context files')
+    # parser.add_argument('--context_dir', default="/home/pj20/server-04/search-c1/data/output_sequences_r1_3b",
+    #                   help='Directory containing context files')
+    parser.add_argument('--context_dir', default="data/output_sequences_r1_no_search")
     parser.add_argument('--num_workers', type=int, default=16,
                       help='Number of worker processes to use')
     parser.add_argument('--random_seed', type=int, default=42,

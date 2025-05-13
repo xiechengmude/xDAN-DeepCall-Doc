@@ -157,7 +157,7 @@ if __name__ == '__main__':
                 example['question'] = example['question'].strip()
                 if example['question'][-1] != '?':
                     example['question'] += '?'
-                example['initial_searched_results'] = initial_searched_results[example['question']]['context_with_info']
+                example['initial_searched_results'] = initial_searched_results[example['question']]['context_with_info'].split("\nDoc 7")[0] + "\n"
                 
                 question = make_prefix(example, args.retriever)
                 solution = {

@@ -36,9 +36,11 @@ def search(query: str, endpoint: str):
 
     return _passages2string(results[0])
 
-def process_question(row, rewriter, endpoint):
-    q = row['question']
-    golden_answers = list(row['golden_answers'])
+def process_question(row, rewriter, endpoint, dataset):
+    # q = row['question']
+    # golden_answers = list(row['golden_answers'])
+    q = row['reward_model']['ground_truth']['question']
+    golden_answers = row['reward_model']['ground_truth']['target'].tolist()  # Convert numpy array to Python list
     
     if rewriter == "none":
         rewritten_query = q
@@ -48,6 +50,10 @@ def process_question(row, rewriter, endpoint):
         rewritten_query = rewrite_query(q, "nq")
     elif rewriter == "squad":
         rewritten_query = rewrite_query(q, "squad")
+        
+    if 'mirage' in dataset:
+        rewritten_query = rewritten_query.split('\nOptions:')[0]
+        # print(rewritten_query)
     
     retrieval_result = search(rewritten_query, endpoint)
     return q, {
@@ -69,7 +75,8 @@ def main():
 
     df = pd.read_parquet(args.input_parquet)
     # data_sources = ['nq', 'triviaqa', 'popqa', 'hotpotqa', '2wikimultihopqa', 'musique', 'bamboogle']
-    data_sources = ['nq', 'hotpotqa']
+    # data_sources = ['nq', 'hotpotqa']
+    data_sources = ['medqa', 'medmcqa', 'pubmedqa', 'bioasq', 'mmlu']
     
     for data_source in data_sources:
         print(f"[INFO] Processing: {data_source}")
@@ -79,7 +86,7 @@ def main():
         with ThreadPoolExecutor(max_workers=args.num_workers) as executor:
             futures = []
             for _, row in qa_data.iterrows():
-                future = executor.submit(process_question, row, args.rewriter, args.endpoint)
+                future = executor.submit(process_question, row, args.rewriter, args.endpoint, args.input_parquet)
                 futures.append(future)
 
             for future in tqdm(as_completed(futures), total=len(futures), desc=f"Processing {data_source}"):

@@ -231,7 +231,7 @@ def extract_titles_and_texts(solution_str):
         return []  # Return empty list if any unexpected error occurs
 
 
-def check_answer_correct(answer, golden_answers):
+def check_answer_correct(answer, golden_answers, model="Qwen/Qwen2.5-14B-Instruct-GPTQ-Int4"):
     answer_context_score = answer_span_check(
         prediction=answer,
         golden_answers=golden_answers
@@ -239,7 +239,8 @@ def check_answer_correct(answer, golden_answers):
     if answer_context_score == 0:
         answer_context_score = 1 if check_if_response_is_correct_llm(
             response=answer,
-            gold_answers=golden_answers
+            gold_answers=golden_answers,
+            model=model
         ) else 0
     return answer_context_score
 
@@ -344,7 +345,7 @@ def output_sequence(solution_str, ground_truth):
     golden_answers = ground_truth['target'].tolist()
     
     # Get documents with titles, handling important documents
-    response_str = solution_str.split("Now, start the loop with the following question:")[1]
+    response_str = solution_str.split("Now, start the loop with the following question and initial searched results:")[1]
     docs = extract_titles_and_texts(solution_str=response_str)
     
     # Build context with unique documents

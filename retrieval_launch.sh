@@ -1,4 +1,4 @@
-export CUDA_VISIBLE_DEVICES=1,2,3,4,5
+export CUDA_VISIBLE_DEVICES=1,3,6,7
 file_path=/shared/eng/pj20/search_c1_data
 index_file=$file_path/e5_Flat.index
 corpus_file=$file_path/wiki-18.jsonl
@@ -7,7 +7,7 @@ retriever_path=intfloat/e5-base-v2
 
 python search_c1/search/retrieval_server.py --index_path $index_file \
                                             --corpus_path $corpus_file \
-                                            --topk 3 \
+                                            --topk 12 \
                                             --retriever_name $retriever_name \
                                             --retriever_model $retriever_path \
                                             --faiss_gpu \

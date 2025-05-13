@@ -42,7 +42,8 @@ def main():
 
     df = pd.read_parquet(args.input_parquet)
 
-    data_sources = ['nq', 'triviaqa', 'popqa', 'hotpotqa', '2wikimultihopqa', 'musique', 'bamboogle']
+    # data_sources = ['nq', 'triviaqa', 'popqa', 'hotpotqa', '2wikimultihopqa', 'musique', 'bamboogle']
+    data_sources = ['medqa', 'medmcqa', 'pubmedqa', 'bioasq', 'mmlu']
 
     for data_source in data_sources:
         print(f"[INFO] Processing: {data_source}")
@@ -50,9 +51,14 @@ def main():
         qa_data = df[df['data_source'] == data_source]
 
         for index, row in qa_data.iterrows():
-            q = row['question']
-            golden_answers = list(row['golden_answers'])
-            retrieval_result = search(q, args.endpoint)
+            # q = row['question']
+            # golden_answers = list(row['golden_answers'])
+            q = row['reward_model']['ground_truth']['question']
+            golden_answers = row['reward_model']['ground_truth']['target'].tolist()
+            if 'mirage' in args.input_parquet:
+                q_ = q.split('\nOptions:')[0]
+                # print(q)
+            retrieval_result = search(q_, args.endpoint)
             question_info = {
                 'golden_answers': golden_answers,
                 'context_with_info': retrieval_result

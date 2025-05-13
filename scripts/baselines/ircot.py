@@ -25,7 +25,8 @@ def call_llm(prompt: str) -> str:
     messages = [
         {"role": "user", "content": prompt}
     ]
-    MODEL = "Qwen/Qwen2.5-14B-Instruct-GPTQ-Int4"
+    # MODEL = "Qwen/Qwen2.5-14B-Instruct-GPTQ-Int4"
+    MODEL = "Qwen/Qwen2.5-7B-Instruct"
 
     payload = {
         "model": MODEL,
@@ -198,8 +199,10 @@ def save_results(result_dict, output_file):
 
 def process_single_question(row, endpoint):
     try:
-        question = row["question"]
-        golden_answers = row.get("golden_answers", [])
+        # question = row["question"]
+        # golden_answers = row.get("golden_answers", [])
+        question = row['reward_model']['ground_truth']['question']
+        golden_answers = row['reward_model']['ground_truth']['target'].tolist()
         golden_answers = golden_answers.tolist() if hasattr(golden_answers, "tolist") else golden_answers
         extra_info = row.get("extra_info", {})
         data_source = extra_info.get("source", None) if isinstance(extra_info, dict) else None
@@ -219,21 +222,23 @@ def process_single_question(row, endpoint):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument('--input_file', default="data/nq_hotpotqa_train/test_e5_ug.parquet", help='Path to input parquet file')
+    # parser.add_argument('--input_file', default="data/nq_hotpotqa_train/test_e5_ug.parquet", help='Path to input parquet file')
+    parser.add_argument('--input_file', default="data/mirage/mirage_test.parquet", help='Path to input parquet file')
     parser.add_argument("--endpoint", default="http://127.0.0.1:3000/retrieve", help="Retrieval API endpoint URL")
-    parser.add_argument('--output_file', default="data/ircot/results.json", help="Path to save output JSON")
-    parser.add_argument('--num_workers', type=int, default=8, help="Number of parallel workers")
+    parser.add_argument('--output_file', default="data/ircot/results_mirage_7b.json", help="Path to save output JSON")
+    parser.add_argument('--num_workers', type=int, default=12, help="Number of parallel workers")
     args = parser.parse_args()
 
     os.makedirs(os.path.dirname(args.output_file), exist_ok=True)
 
     # Load input and previous results
     df = pd.read_parquet(args.input_file)
-    results = load_previous_results(args.output_file)
-    processed_questions = set(results.keys())
+    # results = load_previous_results(args.output_file)
+    # processed_questions = set(results.keys())
+    results = {}
 
-    print(f"Loaded {len(processed_questions)} previously processed questions.")
-    df = df[~df["question"].isin(processed_questions)]
+    # print(f"Loaded {len(processed_questions)} previously processed questions.")
+    # df = df[~df["question"].isin(processed_questions)]
 
     lock = threading.Lock()
 

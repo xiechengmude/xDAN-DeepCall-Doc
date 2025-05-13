@@ -4,6 +4,7 @@ import pandas as pd
 import json
 from verl.utils.reward_score.rag_2 import generate_answer_zero_shot, check_answer_correct, em_check
 from verl.utils.hdfs_io import copy, makedirs
+from generator_llms.claude_api import get_claude_response
 import argparse
 from tqdm import tqdm
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -13,6 +14,49 @@ from datetime import datetime
 
 # MODEL_NAME = "Qwen/Qwen2.5-7B-Instruct"
 MODEL_NAME = "Claude-Haiku"
+
+def evaluate_answer(question, answer, golden_answers):
+    # Convert golden_answers to string if it's a list
+    if isinstance(golden_answers, list):
+        golden_answers = "\n".join([f"- {ans}" for ans in golden_answers])
+    
+    prompt = f"""You are an evaluator for question-answering systems. Your task is to determine if the given answer aligns with the golden answers.
+
+Question: {question}
+
+RAG System's Answer: {answer}
+
+Golden Answers (reference):
+{golden_answers}
+
+Please evaluate if the RAG system's answer aligns with the golden answers. The answer should be considered correct if it:
+- Contains the same key information as the golden answers
+- Expresses the same meaning, even if using different words
+- Is factually consistent with the golden answers
+
+Respond with ONLY "yes" if the answer aligns with the golden answers, or "no" if it does not. Do not include any other text or explanation."""
+
+    max_retries = 3
+    for attempt in range(max_retries):
+        try:
+            response = get_claude_response(prompt, llm="haiku", temperature=0)
+            response = response.strip().lower()
+            
+            # Check if response is valid
+            if response.lower() in ['yes', 'no']:
+                return 1 if 'yes' in response.lower() else 0
+            else:
+                print(f"Invalid response: {response}. Retrying...")
+                time.sleep(1)
+        except Exception as e:
+            print(f"Error on attempt {attempt + 1}: {str(e)}")
+            if attempt < max_retries - 1:
+                time.sleep(2)
+            continue
+    
+    print(f"Failed to get valid response after {max_retries} attempts")
+    return None
+
 
 def load_previous_results(result_file):
     """Load previous results if they exist"""
@@ -72,7 +116,7 @@ def process_question(row, lock):
         zeroshot_answer = generate_answer_zero_shot(prompt=question, model=MODEL_NAME)
         
         # Check if answer is correct
-        is_correct = check_answer_correct(answer=zeroshot_answer, golden_answers=golden_answers, model=MODEL_NAME)
+        is_correct = evaluate_answer(question, zeroshot_answer, golden_answers)
         is_em = em_check(prediction=zeroshot_answer, golden_answers=golden_answers)
         
         return question, zeroshot_answer, is_correct, is_em, data_source
@@ -210,11 +254,11 @@ def process_dataset(input_file, result_file, num_workers=16, random_seed=42, sam
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('--input_file', default="data/nq_hotpotqa_train/test_e5_ug.parquet", help='Path to input parquet file')
-    parser.add_argument('--result_file', default="results/zeroshot_answers_haiku.json", help='Path to save zeroshot answers JSON file')
-    parser.add_argument('--num_workers', type=int, default=10, help='Number of worker threads to use')
+    parser.add_argument('--input_file', default="data/mirage/mirage_test.parquet", help='Path to input parquet file')
+    parser.add_argument('--result_file', default="results/zeroshot_answers_mirage_haiku.json", help='Path to save zeroshot answers JSON file')
+    parser.add_argument('--num_workers', type=int, default=12, help='Number of worker threads to use')
     parser.add_argument('--random_seed', type=int, default=42, help='Random seed for reproducible sampling')
     parser.add_argument('--sampling_enabled', action='store_true', help='Enable sampling of questions')
     
     args = parser.parse_args()
-    process_dataset(args.input_file, args.result_file, args.num_workers, args.random_seed, True) 
+    process_dataset(args.input_file, args.result_file, args.num_workers, args.random_seed, False) 

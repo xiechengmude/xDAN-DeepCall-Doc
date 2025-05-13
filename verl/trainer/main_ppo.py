@@ -57,7 +57,7 @@ class RewardManager():
         self.val_only = val_only
         
         # Add new cache directory for output sequences
-        self.output_sequences_dir = os.path.join("data", "output_sequences_v3")
+        self.output_sequences_dir = os.path.join("data", "output_sequences_s3_3_3_3")
         os.makedirs(self.output_sequences_dir, exist_ok=True)
         self.output_sequences_lock = threading.Lock()
         self.output_sequences_data = {}

@@ -23,21 +23,6 @@ from verl.utils.hdfs_io import copy, makedirs
 import argparse
 import json
 
-# def make_prefix(dp, template_type):
-#     question = dp['question']
-
-#     # NOTE: also need to change reward_score/countdown.py
-#     if template_type == 'base':
-#         """This works for any base model"""
-#         prefix = f"""Answer the given question. \
-# You must conduct reasoning inside <think> and </think> first every time you get new information. \
-# After reasoning, if you find you lack some knowledge, you can call a search engine by <search> query </search> and it will return the top searched results between <information> and </information>. \
-# You can search as many times as your want. \
-# If you find no further external knowledge needed, you can directly provide the answer inside <answer> and </answer>, without detailed illustrations. For example, <answer> Beijing </answer>. Question: {question}\n"""
-#     else:
-#         raise NotImplementedError
-#     return prefix
-
 
 def make_prefix(dp, retriever):
 
@@ -109,99 +94,35 @@ Now, start the loop with the following question and initial searched results:
     return input_str
 
 
-
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--local_dir', default='./data/nq_search')
     parser.add_argument('--hdfs_dir', default=None)
     parser.add_argument('--data_sources', default='nq')
     parser.add_argument('--retriever', default="bm25")
-    parser.add_argument('--initial_searched_results_dir', default="data/RAG_Retrieval/test")
-    
-    
-    import pandas as pd
-    df = pd.read_parquet("data/nq_hotpotqa_train/test_e5_ug.parquet")
-    
-    question_set = set()
-
-    from collections import defaultdict
-    source_questions = defaultdict(list)
-    
-    for data_source in df['data_source'].unique():
-        source_df = df[df['data_source'] == data_source]
-        if len(source_df) > 3000:
-            sampled_df = source_df.sample(n=3000, random_state=42)
-        else:
-            sampled_df = source_df
-        for i in range(len(sampled_df)):
-            question = sampled_df.iloc[i]['reward_model']['ground_truth']['question']
-            if question not in question_set:
-                question_set.add(question)
-                source_questions[data_source].append(question)
-    
-    # print statistics
-    print(f"Total number of questions: {len(question_set)}")
-    for data_source in source_questions:
-        print(f"{data_source}: {len(source_questions[data_source])}")
-    
-    
-        
-    
+    parser.add_argument('--initial_searched_results_dir', default="data/RAG_Retrieval/train")
+    parser.add_argument('--rag_cache_path', default="data/rag_cache/rag_cache.json")
     args = parser.parse_args()
 
+    # Load RAG cache
+    rag_cache = json.load(open(args.rag_cache_path))
+    
+    # data_source = 'nq'
     data_sources = args.data_sources.split(',')
     all_dataset = []
 
     for data_source in data_sources:
         dataset = datasets.load_dataset('RUC-NLPIR/FlashRAG_datasets', data_source)
-
-        if 'test' in dataset:
-            print(f'Using the {data_source} test dataset...')
-            test_dataset = dataset['test']
-        elif 'dev' in dataset:
-            print(f'Using the {data_source} dev dataset...')
-            test_dataset = dataset['dev']
-        else:
-            print(f'Using the {data_source} train dataset...')
-            test_dataset = dataset['train']
-            
-        initial_searched_results = json.load(open(os.path.join(args.initial_searched_results_dir, f'{data_source}_output_sequences.json')))
-
-        # Remove duplicates for popqa
-        if data_source == 'popqa':
-            seen_questions = set()
-            unique_examples = []
-            for example in test_dataset:
-                question = example['question'].strip()
-                if question[-1] != '?':
-                    question += '?'
-                if question not in seen_questions:
-                    seen_questions.add(question)
-                    unique_examples.append(example)
-            test_dataset = datasets.Dataset.from_list(unique_examples)
-            print(f"\nAfter removing duplicates, popqa has {len(test_dataset)} questions")
-
-        # Check for duplicate questions
-        question_counts = {}
-        for example in test_dataset:
-            question = example['question'].strip()
-            if question[-1] != '?':
-                question += '?'
-            question_counts[question] = question_counts.get(question, 0) + 1
+        train_dataset = dataset['train']
         
-        # Print duplicates for popqa
-        if data_source == 'popqa':
-            print(f"\nChecking duplicates in {data_source}:")
-            for question, count in question_counts.items():
-                if count > 1:
-                    print(f"Question appears {count} times: {question}")
+        initial_searched_results = json.load(open(os.path.join(args.initial_searched_results_dir, f'{data_source}_output_sequences.json')))
 
         def make_map_fn(split):
             def process_fn(example, idx):
                 example['question'] = example['question'].strip()
                 if example['question'][-1] != '?':
                     example['question'] += '?'
-                example['initial_searched_results'] = initial_searched_results[example['question']]['context_with_info'].split("\nDoc 4")[0] + "\n"
+                example['initial_searched_results'] = initial_searched_results[example['question']]['context_with_info']
                 
                 question = make_prefix(example, args.retriever)
                 solution = {
@@ -231,32 +152,33 @@ if __name__ == '__main__':
             return process_fn
 
         def filter_fn(example):
-            # Clean question for question set check
+            # Filter out yes/no answers
+            if any(word in example['golden_answers'] for word in ['yes', 'no', 'true', 'false', 'Yes', 'No', 'True', 'False']):
+                return False
+            
+            # Clean question for RAG cache check
             question = example['question'].strip()
             if question[-1] != '?':
                 question += '?'
             
-            # Only include questions that were sampled from test_e5_ug.parquet
-            return question in source_questions[data_source]
+            # Filter out RAG cache examples with score 1
+            if data_source in rag_cache and question in rag_cache[data_source]:
+                if rag_cache[data_source][question]['score'] == 1:
+                    return False
+            
+            return True
 
         # First filter, then map
-        test_dataset = test_dataset.filter(filter_fn)
-        test_dataset = test_dataset.map(function=make_map_fn('test'), with_indices=True)
-        all_dataset.append(test_dataset)
+        train_dataset = train_dataset.filter(filter_fn)
+        train_dataset = train_dataset.map(function=make_map_fn('train'), with_indices=True)
+        all_dataset.append(train_dataset)
 
     local_dir = args.local_dir
     hdfs_dir = args.hdfs_dir
 
-    all_test_dataset = datasets.concatenate_datasets(all_dataset)
-    all_test_dataset.to_parquet(os.path.join(local_dir, f'test_{args.retriever}_u1_sampled.parquet'))
-    
-    # print statistics of test_u1_sampled.parquet
-    df = pd.read_parquet(os.path.join(local_dir, f'test_{args.retriever}_u1_sampled.parquet'))
-    print(f"Total number of questions: {len(df)}")
-    for data_source in df['data_source'].unique():
-        print(f"{data_source}: {len(df[df['data_source'] == data_source])}")
+    all_train_dataset = datasets.concatenate_datasets(all_dataset)
+    all_train_dataset.to_parquet(os.path.join(local_dir, f'train_{args.retriever}_u1.parquet'))
 
     if hdfs_dir is not None:
         makedirs(hdfs_dir)
-
         copy(src=local_dir, dst=hdfs_dir)

@@ -2,7 +2,7 @@ import os
 import random
 import pandas as pd
 import json
-from verl.utils.reward_score.rag_2 import generate_answer_zero_shot, check_answer_correct, em_check
+from verl.utils.reward_score.rag_2 import generate_answer_cot, check_answer_correct, em_check
 from verl.utils.hdfs_io import copy, makedirs
 import argparse
 from tqdm import tqdm
@@ -11,8 +11,8 @@ import threading
 import time
 from datetime import datetime
 
-# MODEL_NAME = "Qwen/Qwen2.5-7B-Instruct"
-MODEL_NAME = "Claude-Haiku"
+# MODEL = "Qwen/Qwen2.5-7B-Instruct"
+MODEL = "Claude-Haiku"
 
 def load_previous_results(result_file):
     """Load previous results if they exist"""
@@ -24,7 +24,7 @@ def load_previous_results(result_file):
     print("No previous results found")
     return {}
 
-def save_results(zeroshot_answers, result_file, stats_file, total_questions, data_source_stats):
+def save_results(cot_answers, result_file, stats_file, total_questions, data_source_stats):
     """Save results and statistics"""
     try:
         # Ensure directories exist
@@ -38,18 +38,18 @@ def save_results(zeroshot_answers, result_file, stats_file, total_questions, dat
         os.makedirs(cache_dir, exist_ok=True)
         os.makedirs(stats_dir, exist_ok=True)
         
-        # Save zeroshot answers
-        print(f"Saving zeroshot answers to: {result_file}")
+        # Save CoT answers
+        print(f"Saving CoT answers to: {result_file}")
         with open(result_file, 'w') as f:
-            json.dump(zeroshot_answers, f)
+            json.dump(cot_answers, f)
         
         # Save statistics
         stats = {
             'timestamp': datetime.now().isoformat(),
             'total_questions': total_questions,
-            'processed_questions': sum(len(answers) for answers in zeroshot_answers.values()),
+            'processed_questions': sum(len(answers) for answers in cot_answers.values()),
             'data_source_stats': data_source_stats,
-            'remaining_questions': total_questions - sum(len(answers) for answers in zeroshot_answers.values())
+            'remaining_questions': total_questions - sum(len(answers) for answers in cot_answers.values())
         }
         
         print(f"Saving statistics to: {stats_file}")
@@ -68,19 +68,19 @@ def process_question(row, lock):
         golden_answers = row['reward_model']['ground_truth']['target']
         data_source = row['data_source']
         
-        # Generate zeroshot answer
-        zeroshot_answer = generate_answer_zero_shot(prompt=question, model=MODEL_NAME)
+        # Generate CoT answer with reasoning steps
+        cot_answer = generate_answer_cot(prompt=question, model=MODEL)
         
         # Check if answer is correct
-        is_correct = check_answer_correct(answer=zeroshot_answer, golden_answers=golden_answers, model=MODEL_NAME)
-        is_em = em_check(prediction=zeroshot_answer, golden_answers=golden_answers)
+        is_correct = check_answer_correct(answer=cot_answer, golden_answers=golden_answers, model=MODEL)
+        is_em = em_check(prediction=cot_answer, golden_answers=golden_answers)
         
-        return question, zeroshot_answer, is_correct, is_em, data_source
+        return question, cot_answer, is_correct, is_em, data_source
     except Exception as e:
         print(f"Error processing question: {str(e)}")
         return None, None, None, None, None
 
-def process_dataset(input_file, result_file, num_workers=16, random_seed=42, sampling_enabled=True):
+def process_dataset(input_file, result_file, num_workers=20, random_seed=42, sampling_enabled=True):
     # Set random seed for reproducibility
     random.seed(random_seed)
     
@@ -112,9 +112,9 @@ def process_dataset(input_file, result_file, num_workers=16, random_seed=42, sam
     lock = threading.Lock()
     
     # Load previous results
-    zeroshot_answers = load_previous_results(result_file)
-    if not zeroshot_answers:
-        zeroshot_answers = {}
+    cot_answers = load_previous_results(result_file)
+    if not cot_answers:
+        cot_answers = {}
     
     # Initialize data source statistics
     data_source_stats = {}
@@ -129,7 +129,7 @@ def process_dataset(input_file, result_file, num_workers=16, random_seed=42, sam
     
     # Filter out already processed questions
     processed_questions_set = set()
-    for data_source, questions in zeroshot_answers.items():
+    for data_source, questions in cot_answers.items():
         processed_questions_set.update(questions.keys())
         # Update data source stats from previous results
         correct_count = sum(1 for info in questions.values() if info['score'] == 1)
@@ -142,7 +142,7 @@ def process_dataset(input_file, result_file, num_workers=16, random_seed=42, sam
     
     remaining_df = df[~df['reward_model'].apply(lambda x: x['ground_truth']['question']).isin(processed_questions_set)]
     
-    print(f"Found {sum(len(answers) for answers in zeroshot_answers.values())} previously processed questions")
+    print(f"Found {sum(len(answers) for answers in cot_answers.values())} previously processed questions")
     print(f"Remaining questions to process: {len(remaining_df)}")
     
     # Create stats file path
@@ -158,18 +158,18 @@ def process_dataset(input_file, result_file, num_workers=16, random_seed=42, sam
         # Process results as they complete
         with tqdm(total=len(futures)) as pbar:
             for future in as_completed(futures):
-                question, zeroshot_answer, is_correct, is_em, data_source = future.result()
+                question, cot_answer, is_correct, is_em, data_source = future.result()
                 
                 if question is not None:  # Skip failed results
                     # Update counters and store results
                     with lock:
                         # Initialize data source if not exists
-                        if data_source not in zeroshot_answers:
-                            zeroshot_answers[data_source] = {}
+                        if data_source not in cot_answers:
+                            cot_answers[data_source] = {}
                         
                         # Store results
-                        zeroshot_answers[data_source][question] = {
-                            'answer': zeroshot_answer,
+                        cot_answers[data_source][question] = {
+                            'answer': cot_answer,
                             'score': 1 if is_correct else 0,
                             'em_score': 1 if is_em else 0
                         }
@@ -199,7 +199,7 @@ def process_dataset(input_file, result_file, num_workers=16, random_seed=42, sam
     
     # Save final results
     print("\nSaving final results")
-    save_results(zeroshot_answers, result_file, stats_file, total_questions, data_source_stats)
+    save_results(cot_answers, result_file, stats_file, total_questions, data_source_stats)
     
     # Print final statistics
     print("\nFinal Statistics per Data Source:")
@@ -207,14 +207,15 @@ def process_dataset(input_file, result_file, num_workers=16, random_seed=42, sam
         print(f"{source}: {stats['correct']}/{stats['total']} correct ({stats['accuracy']:.2%}), {stats['em_correct']}/{stats['total']} em correct ({stats['em_accuracy']:.2%})")
     print(f"\nResults saved to: {result_file}")
     print(f"Statistics saved to: {stats_file}")
+    
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--input_file', default="data/nq_hotpotqa_train/test_e5_ug.parquet", help='Path to input parquet file')
-    parser.add_argument('--result_file', default="results/zeroshot_answers_haiku.json", help='Path to save zeroshot answers JSON file')
+    parser.add_argument('--result_file', default="results/cot_answers_haiku.json", help='Path to save CoT answers JSON file')
     parser.add_argument('--num_workers', type=int, default=10, help='Number of worker threads to use')
     parser.add_argument('--random_seed', type=int, default=42, help='Random seed for reproducible sampling')
     parser.add_argument('--sampling_enabled', action='store_true', help='Enable sampling of questions')
     
     args = parser.parse_args()
-    process_dataset(args.input_file, args.result_file, args.num_workers, args.random_seed, True) 
+    process_dataset(args.input_file, args.result_file, args.num_workers, args.random_seed, True)

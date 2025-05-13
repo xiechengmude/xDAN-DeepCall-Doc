@@ -289,7 +289,7 @@ class LLMGenerationManager:
 
     def run_llm_loop(self, gen_batch, initial_input_ids: torch.Tensor) -> DataProto:
         """
-        Run the Search-C1 loop with environment-based feedback and rewards.
+        Run the s3 loop with environment-based feedback and rewards.
         """
         
         original_left_side = {'input_ids': initial_input_ids[:, -self.config.max_start_length:]}

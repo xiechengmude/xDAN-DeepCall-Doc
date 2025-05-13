@@ -14,6 +14,10 @@ import logging
 import numpy as np
 from typing import List, Dict, Any, Tuple
 
+# MODEL = "Qwen/Qwen2.5-7B-Instruct"
+MODEL = "Claude-Haiku"
+# MODEL = "Qwen/Qwen2.5-14B-Instruct-GPTQ-Int4"
+
 # Configure logging
 def setup_logger(log_file):
     logger = logging.getLogger('context_processor')
@@ -41,10 +45,10 @@ def setup_logger(log_file):
 def load_previous_results(result_file, logger):
     """Load previous results if they exist"""
     logger.info(f"Checking for previous results at: {result_file}")
-    if os.path.exists(result_file):
-        logger.info(f"Loading previous results from {result_file}")
-        with open(result_file, 'r') as f:
-            return json.load(f)
+    # if os.path.exists(result_file):
+    #     logger.info(f"Loading previous results from {result_file}")
+    #     with open(result_file, 'r') as f:
+    #         return json.load(f)
     logger.info("No previous results found")
     return {}
 
@@ -128,18 +132,18 @@ def process_questions_batch(questions_batch: List[Tuple], context_cache: Dict, t
         prompts.append((question, context, row))
     
     # Process prompts in smaller sub-batches to avoid overwhelming the API
-    sub_batch_size = 8
+    sub_batch_size = 16
     for i in range(0, len(prompts), sub_batch_size):
         sub_batch = prompts[i:i+sub_batch_size]
         
         # Generate answers for the sub-batch
         for question, context, row in sub_batch:
             try:
-                answer = generate_answer(prompt=question, context=context)
+                answer = generate_answer(prompt=question, context=context, model=MODEL)
                 golden_answers = row['reward_model']['ground_truth']['target']
                 
                 # Check if answer is correct
-                is_correct = check_answer_correct(answer=answer, golden_answers=golden_answers)
+                is_correct = check_answer_correct(answer=answer, golden_answers=golden_answers, model=MODEL)
                 is_em = em_check(prediction=answer, golden_answers=golden_answers)
                 
                 results.append({
@@ -321,12 +325,12 @@ def process_dataset(input_file: str, result_file: str, context_dir: str, num_wor
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--input_file', default="data/nq_hotpotqa_train/test_e5_ug.parquet", help='Path to input parquet file')
-    parser.add_argument('--result_file', default="results/rag_cache.json", help='Path to save answers JSON file')
-    parser.add_argument('--context_dir', default="data/output_sequences_r1_3b", help='Directory containing context files')
-    parser.add_argument('--num_workers', type=int, default=16, help='Number of worker processes to use')
+    parser.add_argument('--result_file', default="results/rag_haiku.json", help='Path to save answers JSON file')
+    parser.add_argument('--context_dir', default="data/RAG_Retrieval/test", help='Directory containing context files')
+    parser.add_argument('--num_workers', type=int, default=10, help='Number of worker processes to use')
     parser.add_argument('--topk', type=int, default=3, help='Number of context to use')
     parser.add_argument('--random_seed', type=int, default=42, help='Random seed for reproducible sampling')
     parser.add_argument('--sampling_enabled', action='store_true', help='Enable sampling of questions')
     
     args = parser.parse_args()
-    process_dataset(args.input_file, args.result_file, args.context_dir, args.num_workers, args.topk, args.random_seed, args.sampling_enabled) 
+    process_dataset(args.input_file, args.result_file, args.context_dir, args.num_workers, args.topk, args.random_seed, True) 

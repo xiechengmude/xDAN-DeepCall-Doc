@@ -127,6 +127,9 @@ log/
 old
 data
 play.ipynb
+plot.ipynb
+
+plots
 
 verl_checkpoints
 
@@ -139,3 +142,4 @@ results_
 sft_model
 
 *.nfs*
+*.csv
