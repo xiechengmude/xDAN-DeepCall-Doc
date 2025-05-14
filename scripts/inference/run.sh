@@ -11,10 +11,10 @@
 #     --topk 12
 
 python scripts/inference/context.py \
-    --result_file results/deepretrieval_nq_7b.json \
-    --context_dir data/BM25/nq_deepretrieval \
-    --num_workers 20 \
-    --topk 10
+    --result_file results/haiku_3_5_3_3.json \
+    --context_dir data/output_sequences_s3_5_3_3 \
+    --num_workers 10 \
+    --topk 20
 
 
 # python scripts/inference/context.py \

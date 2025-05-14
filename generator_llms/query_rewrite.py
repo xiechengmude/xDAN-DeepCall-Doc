@@ -71,8 +71,8 @@ def rewrite_query(query: str, rewriter_model: str, api_url: str = "http://localh
         }
     elif rewriter_model == "nq":
         payload = {
-            # "model": "DeepRetrieval/DeepRetrieval-NQ-BM25-3B",
-            "model": "/shared/rsaas/pj20/lmr_model/nq_serini_3b_continue/actor/global_step_1400",
+            "model": "DeepRetrieval/DeepRetrieval-NQ-BM25-3B",
+            # "model": "/shared/rsaas/pj20/lmr_model/nq_serini_3b_continue/actor/global_step_1400",
             "messages": messages,
             "temperature": 0.7,
             "max_tokens": 512

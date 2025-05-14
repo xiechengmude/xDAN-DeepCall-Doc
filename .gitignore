@@ -143,3 +143,5 @@ sft_model
 
 *.nfs*
 *.csv
+*.ipynb
+*.pdf

@@ -1,7 +1,7 @@
-export CUDA_VISIBLE_DEVICES=1,3
-file_path=/shared/eng/pj20/search_c1_data
+export CUDA_VISIBLE_DEVICES=4,5,6,7
+file_path=/shared/eng/pj20/s3_medcorp
 index_file=$file_path/e5_Flat.index
-corpus_file=$file_path/wiki-18.jsonl
+corpus_file=$file_path/medcorpus.jsonl
 retriever_name=e5
 retriever_path=intfloat/e5-base-v2
 

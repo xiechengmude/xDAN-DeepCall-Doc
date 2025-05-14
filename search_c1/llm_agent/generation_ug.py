@@ -25,7 +25,8 @@ class GenerationConfig:
     zero_shot_prompt_file: str = "prompts/zero_shot_prompt.txt"  # Path to zero-shot prompt template
     zero_shot_store_file: str = "data/nq_hotpotqa_zeroshot_claude3/zeroshot_answers.json"
     generator_llm: str = "Qwen/Qwen2.5-7B-Instruct-GPTQ-Int4"
-
+    output_context_dir: str = None
+    
 class LLMGenerationManager:
     """
     Search-C1: A search copilot that can be trained separately from the generator LLM.
@@ -53,6 +54,7 @@ class LLMGenerationManager:
         self.zero_shot_prompt = self._load_prompt(config.zero_shot_prompt_file)
         self.zeroshot_answers = self._load_zeroshot_answers(config.zero_shot_store_file)
         self.save_zeroshot_flag = False
+        self.output_context_dir = config.output_context_dir
         # Initialize tensor helper for handling tensors
         from .tensor_helper import TensorHelper, TensorConfig
         self.tensor_fn = TensorHelper(TensorConfig(

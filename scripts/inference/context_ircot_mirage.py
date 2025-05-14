@@ -394,8 +394,8 @@ def process_dataset(input_file: str, result_file: str, context_file: str, num_wo
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--input_file', default="data/mirage/mirage_test.parquet", help='Path to input parquet file')
-    parser.add_argument('--result_file', default="results/ircot_14b_gen_mirage_haiku.json", help='Path to save answers JSON file')
-    parser.add_argument('--context_file', default="data/ircot/results_mirage_14b.json", help='Directory containing context files')
+    parser.add_argument('--result_file', default="results/ircot_7b_gen_mirage_haiku.json", help='Path to save answers JSON file')
+    parser.add_argument('--context_file', default="data/ircot/results_mirage_7b.json", help='Directory containing context files')
     parser.add_argument('--num_workers', type=int, default=1, help='Number of worker processes to use')
     parser.add_argument('--random_seed', type=int, default=42, help='Random seed for reproducible sampling')
     parser.add_argument('--sampling_enabled', action='store_true', help='Enable sampling of questions')

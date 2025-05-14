@@ -33,11 +33,11 @@ from verl.utils.reward_score.extract import output_sequence
 
 
 def _select_rm_score_fn(data_source):
-    if data_source in ['nq', 'triviaqa', 'popqa', 'hotpotqa', '2wikimultihopqa', 'musique', 'bamboogle']:
+    # if data_source in ['nq', 'triviaqa', 'popqa', 'hotpotqa', '2wikimultihopqa', 'musique', 'bamboogle']:
         # return rag.compute_score_rag
         return rag_2.compute_score_rag
-    else:
-        raise NotImplementedError
+    # else:
+    #     raise NotImplementedError
 
 
 class RewardManager():
@@ -53,7 +53,7 @@ class RewardManager():
         self.val_only = val_only
         
         # Add new cache directory for output sequences
-        self.output_sequences_dir = os.path.join("data", "output_sequences_r1_no_search")
+        self.output_sequences_dir = os.path.join("data", "output_sequences_r1_3b_mirage")
         os.makedirs(self.output_sequences_dir, exist_ok=True)
         self.output_sequences_lock = threading.Lock()
         self.output_sequences_data = {}

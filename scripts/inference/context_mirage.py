@@ -369,9 +369,9 @@ def process_dataset(input_file: str, result_file: str, context_dir: str, num_wor
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('--input_file', default="data/nq_hotpotqa_train/test_e5_ug.parquet", help='Path to input parquet file')
-    parser.add_argument('--result_file', default="results/rag_haiku.json", help='Path to save answers JSON file')
-    parser.add_argument('--context_dir', default="data/RAG_Retrieval/test", help='Directory containing context files')
+    parser.add_argument('--input_file', default="data/mirage/mirage_test.parquet", help='Path to input parquet file')
+    parser.add_argument('--result_file', default="results/8-3-3-3-haiku-mirage.json", help='Path to save answers JSON file')
+    parser.add_argument('--context_dir', default="data/output_sequences_s3_8_3_3_mirage", help='Directory containing context files')
     parser.add_argument('--num_workers', type=int, default=10, help='Number of worker processes to use')
     parser.add_argument('--topk', type=int, default=3, help='Number of context to use')
     parser.add_argument('--random_seed', type=int, default=42, help='Random seed for reproducible sampling')

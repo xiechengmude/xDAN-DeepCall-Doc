@@ -601,6 +601,7 @@ class RayPPOTrainer(object):
             search_url = self.config.retriever.url,
             topk = self.config.retriever.topk,
             generator_llm = self.config.generator_llm,
+            output_context_dir = self.config.output_context_dir,
         )
 
         # Agent config preparation
@@ -851,6 +852,7 @@ class RayPPOTrainer(object):
             search_url = self.config.retriever.url,
             topk = self.config.retriever.topk,
             generator_llm = self.config.generator_llm,
+            output_context_dir = self.config.output_context_dir,
         )
 
         generation_manager = LLMGenerationManager(

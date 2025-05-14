@@ -159,7 +159,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     # parser.add_argument('--context_dir', default="/home/pj20/server-04/search-c1/data/output_sequences_r1_3b",
     #                   help='Directory containing context files')
-    parser.add_argument('--context_dir', default="data/output_sequences_r1_no_search")
+    parser.add_argument('--context_dir', default="data/output_sequences_r1_7b_mirage")
     parser.add_argument('--num_workers', type=int, default=16,
                       help='Number of worker processes to use')
     parser.add_argument('--random_seed', type=int, default=42,
@@ -168,7 +168,7 @@ if __name__ == "__main__":
                       help='Enable sampling of questions')
     
     args = parser.parse_args()
-    evaluate_results(args.context_dir, args.num_workers, args.random_seed, args.sampling_enabled)
+    evaluate_results(args.context_dir, args.num_workers, args.random_seed, False)
 
 
 
