@@ -225,7 +225,7 @@ if __name__ == "__main__":
     # parser.add_argument('--input_file', default="data/nq_hotpotqa_train/test_e5_ug.parquet", help='Path to input parquet file')
     parser.add_argument('--input_file', default="data/mirage/mirage_test.parquet", help='Path to input parquet file')
     parser.add_argument("--endpoint", default="http://127.0.0.1:3000/retrieve", help="Retrieval API endpoint URL")
-    parser.add_argument('--output_file', default="data/ircot/results_mirage_7b.json", help="Path to save output JSON")
+    parser.add_argument('--output_file', default="data/ircot/results_mirage_7b_medcorp.json", help="Path to save output JSON")
     parser.add_argument('--num_workers', type=int, default=12, help="Number of parallel workers")
     args = parser.parse_args()
 

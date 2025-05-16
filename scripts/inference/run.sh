@@ -11,8 +11,8 @@
 #     --topk 12
 
 python scripts/inference/context.py \
-    --result_file results/haiku_3_5_3_3.json \
-    --context_dir data/output_sequences_s3_5_3_3 \
+    --result_file results/haiku_s3_3_3_4_general.json \
+    --context_dir data/output_sequences_s3_3_3_4_general \
     --num_workers 10 \
     --topk 20
 

@@ -49,6 +49,144 @@ def answer_span_check(prediction, golden_answers):
     return score
 
 
+# def extract_titles_and_texts(solution_str):
+#     """
+#     Extract titles and texts from information blocks, handling important documents
+#     and preserving their order. Properly handles duplicated documents.
+    
+#     <important_info> tags only apply to the most recent <information> block before them,
+#     even if there are other tags or content in between them.
+    
+#     If an <information> block doesn't have a corresponding <important_info> tag,
+#     all documents in that block are included.
+    
+#     Returns a list of (title, text) tuples for each document.
+#     """
+#     try:
+#         # Extract all information blocks and important_info tags with their positions
+#         info_blocks = []
+#         important_infos = []
+        
+#         # Find all information blocks with their positions
+#         info_pattern = re.compile(r'<information>(.*?)</information>', re.DOTALL)
+#         for match in info_pattern.finditer(solution_str):
+#             info_blocks.append({
+#                 'position': match.start(),
+#                 'content': match.group(1),
+#                 'important_ids': None  # Will be filled if there's a matching important_info
+#             })
+        
+#         # Find all important_info tags with their positions
+#         important_pattern = re.compile(r'<important_info>\s*\[(.*?)\]\s*</important_info>', re.DOTALL)
+#         for match in important_pattern.finditer(solution_str):
+#             # Parse important doc IDs
+#             important_ids = []
+#             try:
+#                 # Extract the content between brackets and clean it
+#                 content = match.group(1).strip()
+                
+#                 # Remove any whitespace, quotes, and "Doc" prefixes
+#                 cleaned_content = re.sub(r'["\']|Doc\s*|\s+', '', content)
+                
+#                 # Split by comma and process each ID
+#                 for id_str in cleaned_content.split(','):
+#                     id_str = id_str.strip()
+#                     if not id_str:  # Skip empty strings
+#                         continue
+                        
+#                     # Try to convert to integer if it's a numeric ID
+#                     try:
+#                         important_ids.append(int(id_str))
+#                     except ValueError:
+#                         # If not numeric, try to extract just the number if it's in "DocX" format
+#                         num_match = re.search(r'\d+', id_str)
+#                         if num_match:
+#                             important_ids.append(int(num_match.group()))
+#                         else:
+#                             # If no number found, keep the original string
+#                             important_ids.append(id_str)
+                            
+#                 # Remove duplicates while preserving order
+#                 important_ids = list(dict.fromkeys(important_ids))
+                
+#             except Exception as e:
+#                 print(f"Warning: Error parsing important document IDs: {str(e)}")
+#                 important_ids = []
+            
+#             important_infos.append({
+#                 'position': match.start(),
+#                 'important_ids': important_ids
+#             })
+        
+#         # Match each important_info with the closest preceding information block
+#         for imp_info in important_infos:
+#             # Find the closest information block that appears before this important_info
+#             closest_info = None
+#             min_distance = float('inf')
+            
+#             for info_block in info_blocks:
+#                 if info_block['position'] < imp_info['position']:
+#                     distance = imp_info['position'] - info_block['position']
+#                     if distance < min_distance:
+#                         min_distance = distance
+#                         closest_info = info_block
+            
+#             # Associate this important_info with the closest preceding information block
+#             if closest_info:
+#                 closest_info['important_ids'] = imp_info['important_ids']
+        
+#         # Process each information block to extract documents
+#         all_docs = []
+#         seen_docs = set()  # To track unique documents
+        
+#         for info_block in info_blocks:            
+#             info_content = info_block['content']
+#             important_ids = info_block['important_ids']
+            
+#             docs_in_block = []
+#             try:
+#                 # Extract individual documents from the info block
+#                 doc_pattern = re.compile(r'Doc\s+(\d+)\(Title:\s*(.*?)\)\s*(.*?)(?=Doc\s+\d+\(Title:|$)', re.DOTALL)
+                
+#                 for match in doc_pattern.finditer(info_content):
+#                     try:
+#                         doc_id = int(match.group(1))
+#                         title = match.group(2).strip().replace('"', '')  # Clean up quotes
+#                         text = match.group(3).strip()
+#                         docs_in_block.append((doc_id, title, text))
+#                     except (IndexError, ValueError) as e:
+#                         print(f"Warning: Error parsing document: {str(e)}")
+#                         continue
+#             except Exception as e:
+#                 print(f"Warning: Error extracting documents from info block: {str(e)}")
+#                 continue
+            
+#             # Filter by important_ids if available
+#             if important_ids:
+#                 try:
+#                     filtered_docs = [(title, text) for doc_id, title, text in docs_in_block 
+#                                     if doc_id in important_ids or str(doc_id) in important_ids or f"Doc {doc_id}" in important_ids]
+#                 except Exception as e:
+#                     print(f"Warning: Error filtering documents: {str(e)}")
+#                     filtered_docs = [(title, text) for _, title, text in docs_in_block]
+#             else:
+#                 # If no important_ids, include all docs
+#                 filtered_docs = [(title, text) for _, title, text in docs_in_block]
+            
+#             # Add unique documents to the result
+#             for title, text in filtered_docs:
+#                 doc_key = (title, text)
+#                 if doc_key not in seen_docs:
+#                     seen_docs.add(doc_key)
+#                     all_docs.append((title, text))
+        
+#         return all_docs
+        
+#     except Exception as e:
+#         print(f"Warning: Error in extract_titles_and_texts: {str(e)}")
+#         return []  # Return empty list if any unexpected error occurs
+
+
 def extract_titles_and_texts(solution_str):
     """
     Extract titles and texts from information blocks, handling important documents
@@ -58,7 +196,7 @@ def extract_titles_and_texts(solution_str):
     even if there are other tags or content in between them.
     
     If an <information> block doesn't have a corresponding <important_info> tag,
-    all documents in that block are included.
+    ALL documents from that block are included.
     
     Returns a list of (title, text) tuples for each document.
     """
@@ -73,39 +211,24 @@ def extract_titles_and_texts(solution_str):
             info_blocks.append({
                 'position': match.start(),
                 'content': match.group(1),
-                'important_ids': None  # Will be filled if there's a matching important_info
+                'important_ids': None,  # Will be filled if there's a matching important_info
+                'processed': False  # Track if this block has been processed
             })
         
         # Find all important_info tags with their positions
-        important_pattern = re.compile(r'<important_info>\s*\[(.*?)\]\s*</important_info>', re.DOTALL)
+        important_pattern = re.compile(r'<important_info>(.*?)</important_info>', re.DOTALL)
         for match in important_pattern.finditer(solution_str):
             # Parse important doc IDs
             important_ids = []
             try:
-                # Extract the content between brackets and clean it
+                # Extract the content and clean it
                 content = match.group(1).strip()
                 
-                # Remove any whitespace, quotes, and "Doc" prefixes
-                cleaned_content = re.sub(r'["\']|Doc\s*|\s+', '', content)
+                # Extract all numbers from the content
+                numbers = re.findall(r'\d+', content)
+                # Convert all numbers to integers
+                important_ids = [int(num) for num in numbers if int(num) in range(1, 20)]  # Expand range to handle more doc IDs
                 
-                # Split by comma and process each ID
-                for id_str in cleaned_content.split(','):
-                    id_str = id_str.strip()
-                    if not id_str:  # Skip empty strings
-                        continue
-                        
-                    # Try to convert to integer if it's a numeric ID
-                    try:
-                        important_ids.append(int(id_str))
-                    except ValueError:
-                        # If not numeric, try to extract just the number if it's in "DocX" format
-                        num_match = re.search(r'\d+', id_str)
-                        if num_match:
-                            important_ids.append(int(num_match.group()))
-                        else:
-                            # If no number found, keep the original string
-                            important_ids.append(id_str)
-                            
                 # Remove duplicates while preserving order
                 important_ids = list(dict.fromkeys(important_ids))
                 
@@ -118,74 +241,91 @@ def extract_titles_and_texts(solution_str):
                 'important_ids': important_ids
             })
         
-        # Match each important_info with the closest preceding information block
+        # Process each important_info tag and associate it with the closest preceding information block
+        all_docs = []
+        seen_docs = set()  # To track unique documents
+        
+        # First process information blocks that have important_info tags
         for imp_info in important_infos:
-            # Find the closest information block that appears before this important_info
+            # Find the closest preceding information block
             closest_info = None
             min_distance = float('inf')
             
             for info_block in info_blocks:
-                if info_block['position'] < imp_info['position']:
+                if not info_block['processed'] and info_block['position'] < imp_info['position']:
+                    # Calculate distance between info block and important_info tag
                     distance = imp_info['position'] - info_block['position']
+                    
+                    # Find the closest information block
                     if distance < min_distance:
                         min_distance = distance
                         closest_info = info_block
             
-            # Associate this important_info with the closest preceding information block
+            # If we found a matching information block, process it
             if closest_info:
-                closest_info['important_ids'] = imp_info['important_ids']
-        
-        # Process each information block to extract documents
-        all_docs = []
-        seen_docs = set()  # To track unique documents
-        
-        for info_block in info_blocks:            
-            info_content = info_block['content']
-            important_ids = info_block['important_ids']
-            
-            docs_in_block = []
-            try:
-                # Extract individual documents from the info block
-                doc_pattern = re.compile(r'Doc\s+(\d+)\(Title:\s*(.*?)\)\s*(.*?)(?=Doc\s+\d+\(Title:|$)', re.DOTALL)
+                closest_info['processed'] = True  # Mark as processed
+                info_content = closest_info['content']
+                important_ids = imp_info['important_ids']
                 
+                # Improved regex pattern to extract documents
+                doc_pattern = re.compile(
+                    r'Doc\s*(\d+)\s*\(Title:\s*([^)]+)\)\s*(.*?)(?=Doc\s*\d+\s*\(Title:|$)',
+                    re.DOTALL
+                )
+                
+                docs_in_block = []
                 for match in doc_pattern.finditer(info_content):
                     try:
                         doc_id = int(match.group(1))
-                        title = match.group(2).strip().replace('"', '')  # Clean up quotes
+                        title = match.group(2).strip()
                         text = match.group(3).strip()
                         docs_in_block.append((doc_id, title, text))
                     except (IndexError, ValueError) as e:
                         print(f"Warning: Error parsing document: {str(e)}")
                         continue
-            except Exception as e:
-                print(f"Warning: Error extracting documents from info block: {str(e)}")
-                continue
-            
-            # Filter by important_ids if available
-            if important_ids:
-                try:
-                    filtered_docs = [(title, text) for doc_id, title, text in docs_in_block 
-                                    if doc_id in important_ids or str(doc_id) in important_ids or f"Doc {doc_id}" in important_ids]
-                except Exception as e:
-                    print(f"Warning: Error filtering documents: {str(e)}")
-                    filtered_docs = [(title, text) for _, title, text in docs_in_block]
-            else:
-                # If no important_ids, include all docs
-                filtered_docs = [(title, text) for _, title, text in docs_in_block]
-            
-            # Add unique documents to the result
-            for title, text in filtered_docs:
-                doc_key = (title, text)
-                if doc_key not in seen_docs:
-                    seen_docs.add(doc_key)
-                    all_docs.append((title, text))
+                
+                # Filter by important_ids
+                filtered_docs = [(title, text) for doc_id, title, text in docs_in_block 
+                                if doc_id in important_ids]
+                
+                # Add unique documents to the result
+                for title, text in filtered_docs:
+                    doc_key = (title, text)
+                    if doc_key not in seen_docs:
+                        seen_docs.add(doc_key)
+                        all_docs.append((title, text))
+        
+        # Then process all remaining unprocessed information blocks (those without important_info tags)
+        for info_block in info_blocks:
+            if not info_block['processed']:
+                info_content = info_block['content']
+                
+                # Improved regex pattern
+                doc_pattern = re.compile(
+                    r'Doc\s*(\d+)\s*\(Title:\s*([^)]+)\)\s*(.*?)(?=Doc\s*\d+\s*\(Title:|$)',
+                    re.DOTALL
+                )
+                
+                for match in doc_pattern.finditer(info_content):
+                    try:
+                        doc_id = int(match.group(1))
+                        title = match.group(2).strip()
+                        text = match.group(3).strip()
+                        
+                        doc_key = (title, text)
+                        if doc_key not in seen_docs:
+                            seen_docs.add(doc_key)
+                            all_docs.append((title, text))
+                    except (IndexError, ValueError) as e:
+                        print(f"Warning: Error parsing document: {str(e)}")
+                        continue
         
         return all_docs
         
     except Exception as e:
         print(f"Warning: Error in extract_titles_and_texts: {str(e)}")
         return []  # Return empty list if any unexpected error occurs
-
+    
 
 def check_answer_correct(answer, golden_answers):
     answer_context_score = answer_span_check(
@@ -285,20 +425,26 @@ def output_sequence(solution_str, ground_truth):
     question = ground_truth['question']
     golden_answers = ground_truth['target'].tolist()
     
-    # Get documents with titles, handling important documents
-    response_str = solution_str.split("If you find no further external knowledge needed, you can directly provide the answer inside <answer> and </answer>, without detailed illustrations. For example, <answer> Beijing </answer>.")[1]
-    docs = extract_titles_and_texts(solution_str=response_str)
+    try:
+        # Get documents with titles, handling important documents
+        response_str = solution_str.split("If you find no further external knowledge needed, you can directly provide the answer inside <answer> and </answer>, without detailed illustrations. For example, <answer> Beijing </answer>.")[1]
+        docs = extract_titles_and_texts(solution_str=response_str)
+        # Build context with unique documents
+        seen_docs = set()
+        doc_id = 1
+        context_with_info = ""
+        for title, text in docs:
+            doc_key = (title, text)
+            if doc_key not in seen_docs:
+                seen_docs.add(doc_key)
+                context_with_info += f"Doc {doc_id} (Title: {title})\n{text}\n\n"
+                doc_id += 1
+                
+    except Exception as e:
+        print(f"Warning: Error in extract_titles_and_texts: {solution_str}")
+        response_str = solution_str
+        context_with_info = solution_str
     
-    # Build context with unique documents
-    seen_docs = set()
-    doc_id = 1
-    context_with_info = ""
-    for title, text in docs:
-        doc_key = (title, text)
-        if doc_key not in seen_docs:
-            seen_docs.add(doc_key)
-            context_with_info += f"Doc {doc_id} (Title: {title})\n{text}\n\n"
-            doc_id += 1
         
     do_print = random.randint(1, 16) == 1
         

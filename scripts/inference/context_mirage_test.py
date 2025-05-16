@@ -146,10 +146,11 @@ def process_questions_batch(questions_batch: List[Tuple], context_cache: Dict, l
         data_source = row['data_source']
         
         # Get context from cache
-        context = context_cache.get(question, {}).get('all_context', '')
+        context = context_cache.get(question, {}).get('context_with_info', '')
         
         if not context:
             # Skip zero-shot, set score to 0
+            print(f"No context found for question: {question}")
             results.append({
                 'question': question,
                 'answer': None,
@@ -210,6 +211,7 @@ def process_single_question(question: str, context: str, row: Dict) -> Dict:
         golden_answers = row['reward_model']['ground_truth']['target']
         
         # Check if answer is correct
+        # is_correct = check_answer_correct(answer, golden_answers, model="claude-haiku")
         is_correct = evaluate_answer(question, answer, golden_answers)
         is_em = em_check(prediction=answer, golden_answers=golden_answers)
         
@@ -400,9 +402,9 @@ def process_dataset(input_file: str, result_file: str, context_file: str, num_wo
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--input_file', default="data/mirage/mirage_test.parquet", help='Path to input parquet file')
-    parser.add_argument('--result_file', default="results/ircot_14b_gen_mirage_haiku_medcorp_test.json", help='Path to save answers JSON file')
-    parser.add_argument('--context_file', default="data/ircot/results_mirage_14b_medcorp.json", help='Directory containing context files')
-    parser.add_argument('--num_workers', type=int, default=1, help='Number of worker processes to use')
+    parser.add_argument('--result_file', default="results/rag_e5_medcorp_mirage_haiku_medcorp_test.json", help='Path to save answers JSON file')
+    parser.add_argument('--context_file', default="data/mirage/rag_e5_medcorp_/pubmedqa_output_sequences.json", help='Directory containing context files')
+    parser.add_argument('--num_workers', type=int, default=10, help='Number of worker processes to use')
     parser.add_argument('--random_seed', type=int, default=42, help='Random seed for reproducible sampling')
     parser.add_argument('--sampling_enabled', action='store_true', help='Enable sampling of questions')
     parser.add_argument('--test_mode', action='store_true', help='Enable test mode to only process PubMedQA data')

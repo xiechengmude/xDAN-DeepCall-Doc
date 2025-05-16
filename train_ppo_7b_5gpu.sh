@@ -7,7 +7,7 @@ WAND_PROJECT="SearchAgent"
 
 export BASE_MODEL='Qwen/Qwen2.5-7B-Instruct-1M'
 # export BASE_MODEL='Qwen/Qwen2.5-7B-Instruct'
-export EXPERIMENT_NAME="s3_3_3_4"
+export EXPERIMENT_NAME="s3_5_3_4_new"
 export VLLM_ATTENTION_BACKEND=XFORMERS
 
 PYTHONUNBUFFERED=1 python3 -m verl.trainer.main_ppo \
@@ -64,7 +64,7 @@ PYTHONUNBUFFERED=1 python3 -m verl.trainer.main_ppo \
     trainer.default_local_dir=verl_checkpoints/$EXPERIMENT_NAME \
     max_turns=5 \
     +generator_llm="Qwen/Qwen2.5-14B-Instruct-GPTQ-Int4" \
-    +output_context_dir="data/output_sequences_s3_3_3_4_" \
+    +output_context_dir="data/output_sequences_s3_5_3_4_new" \
     retriever.url="http://127.0.0.1:3000/retrieve" \
-    retriever.topk=3 \
+    retriever.topk=5 \
     2>&1 | tee $EXPERIMENT_NAME.log

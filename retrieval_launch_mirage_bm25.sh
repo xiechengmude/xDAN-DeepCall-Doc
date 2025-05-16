@@ -1,7 +1,7 @@
 # export CUDA_VISIBLE_DEVICES=6,7
 save_path=/shared/eng/pj20/s3_medcorp
 
-index_file=$save_path/bm25
+index_file=$save_path/bm25/bm25
 corpus_file=$save_path/medcorpus.jsonl
 retriever_name=bm25
 

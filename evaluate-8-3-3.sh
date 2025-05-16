@@ -9,10 +9,11 @@ export BASE_MODEL=""
 export VLLM_ATTENTION_BACKEND=XFORMERS # vllm + qwen2-7b with flash_attn has some issues
 
 # max_prompt_length = (config['training']['max_start_length'] + config['training']['max_response_length'] * (config['training']['max_turns'] - 1) + config['training']['max_obs_length'] * config['training']['max_turns'])
+# data.val_files=data/mirage/mirage_test.parquet \
 
 PYTHONUNBUFFERED=1 python3 -m verl.trainer.main_ppo \
     data.train_files=$DATA_DIR/train_e5_u1.parquet  \
-    data.val_files=data/mirage/mirage_test.parquet \
+    data.val_files=data/mirage/mirage_medcorp_test.parquet \
     data.train_data_num=null \
     data.val_data_num=null \
     data.train_batch_size=16 \
@@ -55,7 +56,7 @@ PYTHONUNBUFFERED=1 python3 -m verl.trainer.main_ppo \
     trainer.nnodes=1 \
     max_turns=4 \
     +generator_llm="Qwen/Qwen2.5-14B-Instruct-GPTQ-Int4" \
-    +output_context_dir="data/output_sequences_s3_8_3_3_mirage" \
+    +output_context_dir="data/output_sequences_s3_8_3_3_mirage_medcorp_new" \
     retriever.url="http://127.0.0.1:3000/retrieve" \
     retriever.topk=8 \
-    2>&1 | tee evaluation_s3_8_3_3_mirage.log
+    2>&1 | tee evaluation_s3_8_3_3_mirage_medcorp_new.log

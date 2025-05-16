@@ -11,7 +11,7 @@ from generator_llms.query_rewrite import rewrite_query
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from tqdm import tqdm
 
-def search(query: str, endpoint: str):
+def search(query: str, endpoint: str, input_parquet: str):
     payload = {
         "queries": [query],
         "topk": 12,
@@ -25,16 +25,24 @@ def search(query: str, endpoint: str):
         print(f"[ERROR] Retrieval failed for query: {query}\n{e}")
         return ""
 
-    def _passages2string(retrieval_result):
+    def _passages2string(retrieval_result, input_parquet: str):
         format_reference = ''
         for idx, doc_item in enumerate(retrieval_result):
             content = doc_item['document']['contents']
+            # if "mirage" in input_parquet:
+            #     if "." in content:
+            #         title = content.split(".")[0]
+            #         text = content.split(".")[1]
+            #     else:
+            #         title = content.split("\n")[0]
+            #         text = "\n".join(content.split("\n")[1:])
+            # else:
             title = content.split("\n")[0]
             text = "\n".join(content.split("\n")[1:])
             format_reference += f"Doc {idx+1} (Title: {title}) {text}\n"
         return format_reference
 
-    return _passages2string(results[0])
+    return _passages2string(results[0], input_parquet)
 
 def process_question(row, rewriter, endpoint, dataset):
     # q = row['question']
@@ -55,7 +63,7 @@ def process_question(row, rewriter, endpoint, dataset):
         rewritten_query = rewritten_query.split('\nOptions:')[0]
         # print(rewritten_query)
     
-    retrieval_result = search(rewritten_query, endpoint)
+    retrieval_result = search(rewritten_query, endpoint, dataset)
     return q, {
         'golden_answers': golden_answers,
         'context_with_info': retrieval_result

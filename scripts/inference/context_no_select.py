@@ -4,7 +4,6 @@ import pandas as pd
 import json
 from verl.utils.reward_score.rag_2 import generate_answer, check_answer_correct, em_check, generate_answer_zero_shot
 from verl.utils.hdfs_io import copy, makedirs
-from generator_llms.claude_api import get_claude_response
 import argparse
 from tqdm import tqdm
 from concurrent.futures import ProcessPoolExecutor, as_completed
@@ -14,54 +13,10 @@ from datetime import datetime
 import logging
 import numpy as np
 from typing import List, Dict, Any, Tuple
-from concurrent.futures import ThreadPoolExecutor
 
 # MODEL = "Qwen/Qwen2.5-7B-Instruct"
 MODEL = "Claude-Haiku"
-
-
-def evaluate_answer(question, answer, golden_answers):
-    # Convert golden_answers to string if it's a list
-    if isinstance(golden_answers, list):
-        golden_answers = "\n".join([f"- {ans}" for ans in golden_answers])
-    
-    prompt = f"""You are an evaluator for question-answering systems. Your task is to determine if the given answer aligns with the golden answers.
-
-Question: {question}
-
-RAG System's Answer: {answer}
-
-Golden Answers (reference):
-{golden_answers}
-
-Please evaluate if the RAG system's answer aligns with the golden answers. The answer should be considered correct if it:
-- Contains the same key information as the golden answers
-- Expresses the same meaning, even if using different words
-- Is factually consistent with the golden answers
-
-Respond with ONLY "yes" if the answer aligns with the golden answers, or "no" if it does not. Do not include any other text or explanation."""
-
-    max_retries = 3
-    for attempt in range(max_retries):
-        try:
-            response = get_claude_response(prompt, llm="haiku", temperature=0)
-            response = response.strip().lower()
-            
-            # Check if response is valid
-            if response.lower() in ['yes', 'no']:
-                return 1 if 'yes' in response.lower() else 0
-            else:
-                print(f"Invalid response: {response}. Retrying...")
-                time.sleep(1)
-        except Exception as e:
-            print(f"Error on attempt {attempt + 1}: {str(e)}")
-            if attempt < max_retries - 1:
-                time.sleep(2)
-            continue
-    
-    print(f"Failed to get valid response after {max_retries} attempts")
-    return None
-
+# MODEL = "Qwen/Qwen2.5-14B-Instruct-GPTQ-Int4"
 
 # Configure logging
 def setup_logger(log_file):
@@ -89,13 +44,35 @@ def setup_logger(log_file):
 
 def load_previous_results(result_file, logger):
     """Load previous results if they exist"""
-    # logger.info(f"Checking for previous results at: {result_file}")
+    logger.info(f"Checking for previous results at: {result_file}")
     # if os.path.exists(result_file):
     #     logger.info(f"Loading previous results from {result_file}")
     #     with open(result_file, 'r') as f:
     #         return json.load(f)
-    # logger.info("No previous results found")
+    logger.info("No previous results found")
     return {}
+
+
+import re
+
+def filter_info(text):
+    # Find all <information> sections
+    if "</question>" in text:
+        text = text.split("</question>")[1]
+    text = text.replace("<information>", "").replace("</information>", "")
+    text = text.replace("<important_info>", "").replace("</important_info>", "")
+    text = text.replace("<query>", "").replace("</query>", "")
+    text = text.replace("<|im_end|>", "")
+    text = text.replace("<|im_start|>user", "")
+    text = text.replace("<|im_start|>assistant", "")
+    text = text.replace("<|im_start|>system", "")
+    text = text.replace("<|im_start|>user", "")
+    text = text.replace("<|im_start|>assistant", "")
+    text = text.replace("<|im_start|>system", "")
+    text = text.replace("The information is not enough to answer the question. Let me dive deeper by generating a brand new search query between <query> and </query> tags in JSON format:\n<query>\n", "")
+
+    return text
+
 
 def save_results(answers, result_file, stats_file, total_questions, data_source_stats, logger):
     """Save results and statistics"""
@@ -134,8 +111,22 @@ def save_results(answers, result_file, stats_file, total_questions, data_source_
         logger.error(f"Error saving results: {str(e)}")
         raise
 
+def load_context_cache(context_dir: str, data_sources: List[str], logger) -> Dict[str, Dict]:
+    """Load all context files into memory at startup"""
+    logger.info("Loading context cache...")
+    cache = {}
+    for source in data_sources:
+        context_file = os.path.join(context_dir, f"{source}_output_sequences.json")
+        if os.path.exists(context_file):
+            logger.info(f"Loading context file: {context_file}")
+            with open(context_file, 'r') as f:
+                cache[source] = json.load(f)
+        else:
+            logger.warning(f"Context file not found: {context_file}")
+    logger.info("Context cache loading complete")
+    return cache
 
-def process_questions_batch(questions_batch: List[Tuple], context_cache: Dict, logger) -> List[Dict]:
+def process_questions_batch(questions_batch: List[Tuple], context_cache: Dict, topk: int, logger) -> List[Dict]:
     """Process a batch of questions using batched API calls"""
     results = []
     
@@ -146,7 +137,10 @@ def process_questions_batch(questions_batch: List[Tuple], context_cache: Dict, l
         data_source = row['data_source']
         
         # Get context from cache
-        context = context_cache.get(question, {}).get('all_context', '')
+        # context = context_cache.get(data_source, {}).get(question, {}).get('context_with_info', '').split(f'Doc {topk+1}')[0]
+        context = context_cache.get(data_source, {}).get(question, {}).get('response_str', '')
+        context = filter_info(context)
+        
         
         if not context:
             # Skip zero-shot, set score to 0
@@ -162,37 +156,30 @@ def process_questions_batch(questions_batch: List[Tuple], context_cache: Dict, l
         # Context-based prompt
         prompts.append((question, context, row))
     
-    # Process all prompts in parallel using ThreadPoolExecutor
-    # Using 16 threads per batch since we have many available cores
-    with ThreadPoolExecutor(max_workers=16) as executor:
-        futures = []
-        for question, context, row in prompts:
-            future = executor.submit(process_single_question, question, context, row)
-            futures.append(future)
+    # Process prompts in smaller sub-batches to avoid overwhelming the API
+    sub_batch_size = 16
+    for i in range(0, len(prompts), sub_batch_size):
+        sub_batch = prompts[i:i+sub_batch_size]
         
-        # Collect results as they complete
-        for future in as_completed(futures):
+        # Generate answers for the sub-batch
+        for question, context, row in sub_batch:
             try:
-                result = future.result()
-                results.append(result)
-            except Exception as e:
-                logger.error(f"Error processing question: {str(e)}")
-                # Add error result
+                answer = generate_answer(prompt=question, context=context, model=MODEL)
+                golden_answers = row['reward_model']['ground_truth']['target']
+                
+                # Check if answer is correct
+                is_correct = check_answer_correct(answer=answer, golden_answers=golden_answers, model=MODEL)
+                is_em = em_check(prediction=answer, golden_answers=golden_answers)
+                
                 results.append({
                     'question': question,
-                    'answer': None,
-                    'is_correct': False,
-                    'is_em': False,
+                    'answer': answer,
+                    'is_correct': is_correct,
+                    'is_em': is_em,
                     'data_source': row['data_source']
                 })
-    
-    # Ensure we return results for all questions in the batch
-    if len(results) < len(questions_batch):
-        logger.warning(f"Batch processing incomplete: {len(results)}/{len(questions_batch)} questions processed")
-        # Add placeholder results for any missing questions
-        for row in questions_batch:
-            question = row['reward_model']['ground_truth']['question']
-            if not any(r['question'] == question for r in results):
+            except Exception as e:
+                logger.error(f"Error processing question: {str(e)}")
                 results.append({
                     'question': question,
                     'answer': None,
@@ -203,27 +190,7 @@ def process_questions_batch(questions_batch: List[Tuple], context_cache: Dict, l
     
     return results
 
-def process_single_question(question: str, context: str, row: Dict) -> Dict:
-    """Process a single question with its context"""
-    try:
-        answer = generate_answer(prompt=question, context=context, model=MODEL)
-        golden_answers = row['reward_model']['ground_truth']['target']
-        
-        # Check if answer is correct
-        is_correct = evaluate_answer(question, answer, golden_answers)
-        is_em = em_check(prediction=answer, golden_answers=golden_answers)
-        
-        return {
-            'question': question,
-            'answer': answer,
-            'is_correct': is_correct,
-            'is_em': is_em,
-            'data_source': row['data_source']
-        }
-    except Exception as e:
-        raise Exception(f"Error processing question: {str(e)}")
-
-def process_dataset(input_file: str, result_file: str, context_file: str, num_workers: int = 16, random_seed: int = 42, sampling_enabled: bool = False, test_mode: bool = False):
+def process_dataset(input_file: str, result_file: str, context_dir: str, num_workers: int = 16, topk: int = 12, random_seed: int = 42, sampling_enabled: bool = False):
     # Setup logger
     log_file = result_file.replace('.json', '.log')
     logger = setup_logger(log_file)
@@ -234,12 +201,6 @@ def process_dataset(input_file: str, result_file: str, context_file: str, num_wo
     # Load the dataset
     logger.info(f"Loading dataset from {input_file}")
     df = pd.read_parquet(input_file)
-    
-    # Filter for PubMedQA if in test mode
-    if test_mode:
-        logger.info("Test mode enabled - only processing PubMedQA data")
-        df = df[df['data_source'] == 'pubmedqa']
-        logger.info(f"Found {len(df)} PubMedQA questions")
     
     if sampling_enabled:
         # Sample 3000 questions per data source if more than 3000 exist
@@ -300,7 +261,7 @@ def process_dataset(input_file: str, result_file: str, context_file: str, num_wo
     logger.info(f"Stats file will be saved to: {stats_file}")
     
     # Load context cache
-    context_cache = json.load(open(context_file, 'r'))
+    context_cache = load_context_cache(context_dir, df['data_source'].unique(), logger)
     
     # Process remaining questions in parallel using process pool
     logger.info(f"Processing remaining questions with {num_workers} workers...")
@@ -309,9 +270,8 @@ def process_dataset(input_file: str, result_file: str, context_file: str, num_wo
     remaining_rows = remaining_df.to_dict('records')
     
     # Process in batches
-    batch_size = 8
+    batch_size = 32
     results_buffer = []
-    processed_count = 0  # Counter for showing statistics
     
     with ProcessPoolExecutor(max_workers=num_workers) as executor:
         # Create batches
@@ -319,23 +279,17 @@ def process_dataset(input_file: str, result_file: str, context_file: str, num_wo
         logger.info(f"Created {len(batches)} batches of size {batch_size}")
         
         # Submit batches to process pool
-        futures = {executor.submit(process_questions_batch, batch, context_cache, logger): i for i, batch in enumerate(batches)}
+        futures = {executor.submit(process_questions_batch, batch, context_cache, topk, logger): i for i, batch in enumerate(batches)}
         
         # Process results as they complete
-        with tqdm(total=len(remaining_rows), desc="Processing questions") as pbar:
+        with tqdm(total=len(remaining_rows)) as pbar:
             for future in as_completed(futures):
                 try:
                     batch_results = future.result()
-                    if not batch_results:
-                        logger.warning(f"Empty batch results received for batch {futures[future]}")
-                        continue
-                        
                     results_buffer.extend(batch_results)
-                    processed_count += len(batch_results)
                     
                     # Update progress bar
                     pbar.update(len(batch_results))
-                    pbar.set_postfix({'processed': len(results_buffer)})
                     
                     # Process results and update statistics
                     for result in batch_results:
@@ -368,22 +322,18 @@ def process_dataset(input_file: str, result_file: str, context_file: str, num_wo
                                 data_source_stats[data_source]['total']
                             )
                     
-                    # Show statistics every 100 steps
-                    if processed_count % 100 == 0:
-                        logger.info(f"\nStatistics after {processed_count} questions:")
-                        for source, stats in data_source_stats.items():
-                            if stats['total'] > 0:  # Only show sources that have been processed
-                                logger.info(f"{source}: {stats['correct']}/{stats['total']} correct ({stats['accuracy']:.2%}), {stats['em_correct']}/{stats['total']} em correct ({stats['em_accuracy']:.2%})")
-                    
                     # Save results periodically
                     if len(results_buffer) >= 10000:
                         save_results(answers, result_file, stats_file, total_questions, data_source_stats, logger)
                         results_buffer = []
+                        
+                        # Log statistics
+                        logger.info("\nCurrent statistics per data source:")
+                        for source, stats in data_source_stats.items():
+                            logger.info(f"{source}: {stats['correct']}/{stats['total']} correct ({stats['accuracy']:.2%}), {stats['em_correct']}/{stats['total']} em correct ({stats['em_accuracy']:.2%})")
                 
                 except Exception as e:
-                    logger.error(f"Error processing batch {futures[future]}: {str(e)}")
-                    # Update progress bar even on error to keep it moving
-                    pbar.update(batch_size)
+                    logger.error(f"Error processing batch: {str(e)}")
     
     # Save final results
     logger.info("\nSaving final results")
@@ -399,13 +349,13 @@ def process_dataset(input_file: str, result_file: str, context_file: str, num_wo
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('--input_file', default="data/mirage/mirage_test.parquet", help='Path to input parquet file')
-    parser.add_argument('--result_file', default="results/ircot_14b_gen_mirage_haiku_medcorp_test.json", help='Path to save answers JSON file')
-    parser.add_argument('--context_file', default="data/ircot/results_mirage_14b_medcorp.json", help='Directory containing context files')
-    parser.add_argument('--num_workers', type=int, default=1, help='Number of worker processes to use')
+    parser.add_argument('--input_file', default="data/nq_hotpotqa_train/test_e5_ug.parquet", help='Path to input parquet file')
+    parser.add_argument('--result_file', default="results/rag_haiku.json", help='Path to save answers JSON file')
+    parser.add_argument('--context_dir', default="data/RAG_Retrieval/test", help='Directory containing context files')
+    parser.add_argument('--num_workers', type=int, default=10, help='Number of worker processes to use')
+    parser.add_argument('--topk', type=int, default=3, help='Number of context to use')
     parser.add_argument('--random_seed', type=int, default=42, help='Random seed for reproducible sampling')
     parser.add_argument('--sampling_enabled', action='store_true', help='Enable sampling of questions')
-    parser.add_argument('--test_mode', action='store_true', help='Enable test mode to only process PubMedQA data')
     
     args = parser.parse_args()
-    process_dataset(args.input_file, args.result_file, args.context_file, args.num_workers, args.random_seed, False, True) 
+    process_dataset(args.input_file, args.result_file, args.context_dir, args.num_workers, args.topk, args.random_seed, True) 

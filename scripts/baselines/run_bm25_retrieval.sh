@@ -7,6 +7,6 @@
 python scripts/baselines/bm25_retrieval.py \
     --input_parquet data/mirage/mirage_test.parquet \
     --rewriter nq \
-    --output_dir data/mirage_deepretrieval_nq/ \
+    --output_dir data/mirage \
     --endpoint http://127.0.0.1:4000/retrieve
 
