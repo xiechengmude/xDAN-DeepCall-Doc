@@ -42,7 +42,7 @@ from verl.utils.seqlen_balancing import get_seqlen_balanced_partitions, log_seql
 import re
 # from search_c1.llm_agent.generation import LLMGenerationManager, GenerationConfig
 # from search_c1.llm_agent.generation_perp import LLMGenerationManager, GenerationConfig
-from search_c1.llm_agent.generation_ug import LLMGenerationManager, GenerationConfig
+from s3.llm_agent.generation_s3 import LLMGenerationManager, GenerationConfig
 
 from tqdm import tqdm
 

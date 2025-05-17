@@ -20,10 +20,6 @@ class GenerationConfig:
     search_url: str = None
     topk: int = 3
     include_information: bool = False  # Whether to include search results in feedback
-    feedback_prompt_file: str = "prompts/feedback_prompt.txt"  # Path to feedback prompt template
-    answer_prompt_file: str = "prompts/answer_prompt.txt"  # Path to answer prompt template
-    zero_shot_prompt_file: str = "prompts/zero_shot_prompt.txt"  # Path to zero-shot prompt template
-    zero_shot_store_file: str = "data/nq_hotpotqa_zeroshot_claude3/zeroshot_answers.json"
     generator_llm: str = "Qwen/Qwen2.5-7B-Instruct-GPTQ-Int4"
     output_context_dir: str = None
     
@@ -47,13 +43,7 @@ class LLMGenerationManager:
         self.config = config
         self.is_validation = is_validation
         self.timing_raw = {}
-        
         # Load prompt templates for the generator LLM
-        self.feedback_prompt = self._load_prompt(config.feedback_prompt_file)
-        self.answer_prompt = self._load_prompt(config.answer_prompt_file)
-        self.zero_shot_prompt = self._load_prompt(config.zero_shot_prompt_file)
-        self.zeroshot_answers = self._load_zeroshot_answers(config.zero_shot_store_file)
-        self.save_zeroshot_flag = False
         self.output_context_dir = config.output_context_dir
         # Initialize tensor helper for handling tensors
         from .tensor_helper import TensorHelper, TensorConfig
@@ -73,12 +63,6 @@ class LLMGenerationManager:
         except (FileNotFoundError, IOError):
             print(f"Zeroshot answers file {filename} not found.")
             return {}
-        
-    def _save_zeroshot_answers(self, filename):
-        """Save zeroshot answers to file."""
-        if self.save_zeroshot_flag:
-            with open(filename, 'w') as file:
-                json.dump(self.zeroshot_answers, file, indent=2)
 
     def _load_prompt(self, filename):
         """Load prompt template from file."""

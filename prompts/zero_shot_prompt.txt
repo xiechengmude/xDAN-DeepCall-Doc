@@ -1,6 +1,0 @@
-You are an AI assistant providing the answer to a question.
-
-Question: {question}
-
-Please directly answer the Question with no more than 5 words. Do not include anything else in your response. 
-Now, answer:
