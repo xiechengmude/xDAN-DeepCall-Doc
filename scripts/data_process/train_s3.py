@@ -177,7 +177,7 @@ if __name__ == '__main__':
     hdfs_dir = args.hdfs_dir
 
     all_train_dataset = datasets.concatenate_datasets(all_dataset)
-    all_train_dataset.to_parquet(os.path.join(local_dir, f'train_{args.retriever}_u1.parquet'))
+    all_train_dataset.to_parquet(os.path.join(local_dir, f'train_{args.retriever}_s3.parquet'))
 
     if hdfs_dir is not None:
         makedirs(hdfs_dir)

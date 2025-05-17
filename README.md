@@ -1,5 +1,10 @@
-# s3 - Efficient Yet Effective Search Agent Training via RL
+<div align="center">
 
+# s3 - Efficient Yet Effective Search Agent Training via RL
+***You Don't Need That Much Data to Train a Search Agent***
+
+
+</div>
 
 
 
@@ -7,12 +12,16 @@
 ## Table of Contents
 
 - [📦 Installation](#-installation)
-- [⚡️ Easy-to-use API for Query Rewriting](#️-easy-to-use-api-for-query-rewriting)
-- [🫧 Get Started](#-get-started)
-- [🏃 Run Training](#-run-training)
-- [🧐 Run Evaluation](#-run-evaluation)
+- [💡 Preparation](#-data-preparation)
+- [🏋️ Run Training](#-run-training)
+- [🔍 Run Search / Retrieval](#-run-context-gathering)
+    - [Baselines](#-baselines)
+    - [s3](#-s3)
+- [📈 Run Evaluation](#-run-evaluation)
 
 ## 📦 Installation
+
+**Searcher & Generator Environment**
 ```
 conda create -n s3 python=3.9
 # install torch [or you can skip this step and let vllm to install the correct version for you]
@@ -31,12 +40,26 @@ pip3 install flash-attn --no-build-isolation
 # we use pyserini for efficient retrieval and evaluation
 pip install pyserini    # the version we used is 0.22.1
 
-# if you don't have faiss installed, install it with:
-pip install faiss-gpu==1.7.2    # the version we used is 1.7.2
-
 # quality of life
 pip install wandb IPython matplotlib huggingface_hub
 ```
+
+**Retriever Environment**
+```
+conda create -n ret python=3.10
+conda activate ret
+
+conda install pytorch==2.4.0 torchvision==0.19.0 torchaudio==2.4.0 pytorch-cuda=12.1 -c pytorch -c nvidia
+pip install transformers datasets pyserini
+conda install -c pytorch -c nvidia faiss-gpu=1.8.0
+pip install uvicorn fastapi
+```
+
+
+
+
+## 💡 Data Preparation
+
 
 
 
@@ -44,7 +67,7 @@ pip install wandb IPython matplotlib huggingface_hub
 ## Run Baselines (Context Gathering)
 **RAG**
 ```bash
-bash retrieval_launch.sh # or retrieval_launch_bm25.sh # deploy retriever
+bash scripts/deploy_retriever/retrieval_launch.sh # or retrieval_launch_bm25.sh # deploy retriever
 bash scripts/baselines/rag.sh # run RAG 
 ```
 
