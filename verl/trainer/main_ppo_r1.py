@@ -33,11 +33,11 @@ from verl.utils.reward_score.extract import output_sequence
 
 
 def _select_rm_score_fn(data_source):
-    if data_source in ['nq', 'triviaqa', 'popqa', 'hotpotqa', '2wikimultihopqa', 'musique', 'bamboogle']:
+    # if data_source in ['nq', 'triviaqa', 'popqa', 'hotpotqa', '2wikimultihopqa', 'musique', 'bamboogle']:
         # return rag.compute_score_rag
         return rag_2.compute_score_rag
-    else:
-        raise NotImplementedError
+    # else:
+    #     raise NotImplementedError
 
 
 class RewardManager():
@@ -53,7 +53,7 @@ class RewardManager():
         self.val_only = val_only
         
         # Add new cache directory for output sequences
-        self.output_sequences_dir = os.path.join("data", "output_sequences_r1_14b")
+        self.output_sequences_dir = os.path.join("data", "output_sequences_r1_7b_mirage_medcorp")
         os.makedirs(self.output_sequences_dir, exist_ok=True)
         self.output_sequences_lock = threading.Lock()
         self.output_sequences_data = {}
@@ -164,7 +164,7 @@ class RewardManager():
                     }
                     
                     # Periodically save to file (1% chance)
-                    if random.random() < 0.01:
+                    if random.random() < 0.03:
                         # Save to a temporary file first
                         temp_file = os.path.join(self.output_sequences_dir, f"{data_source}_output_sequences.json.tmp")
                         with open(temp_file, 'w') as f:

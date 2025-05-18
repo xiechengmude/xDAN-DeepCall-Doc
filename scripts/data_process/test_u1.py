@@ -49,7 +49,7 @@ You should show the search query between <query> and </query> in JSON format.
 Based on the search query, we will return the top searched results between <information> and </information>. You need to put the doc ids of the important documents (up to 3 documents, within the current information window) between <important_info> and </important_info> (e.g., <important_info>[1, 4]</important_info>).
 A search query MUST be followed by a <search_complete> tag if the search is not complete.
 After reviewing the information, you must decide whether to continue searching with a new query or indicate that the search is complete. If you need more information, use <search_complete>False</search_complete> to indicate you want to continue searching with a better query. Otherwise, use <search_complete>True</search_complete> to terminate the search.
-During the process, you can add reasoning process within <think></think> tag whenever you want. Note: Only the important information would be used for the generation model to produce an answer.
+Note: Only the important information would be used for the generation model to produce an answer.
 """
 
     if retriever == "bm25":
@@ -65,11 +65,17 @@ For a question and initial searched results:
 </information>
 
 If the initial searched results are enough to produce an answer, you should output:
+<think>
+[analyze the question and initial searched results]
+</think>
 <search_complete>
 True
 </search_complete>
 
 If the initial searched results are not enough to produce an answer, you should output:
+<think>
+[analyze the question and initial searched results]
+</think>
 <query>
 {
     "query": "[search query]"
@@ -78,18 +84,24 @@ If the initial searched results are not enough to produce an answer, you should 
 <information>
 [top searched results based on the above search query]
 </information>
+<think>
+[think about what documents are important]
+</think>
 <important_info>
 [doc ids]
 </important_info>
 <search_complete>
 False
 </search_complete>
+<think>
+[what to search next]
+</think>
 <query>
 {
     "query": "[search query]"
 }
 </query>
-...... (can be several turns until <search_complete> is True)
+...... (several turns until <search_complete> is True)
 
 <search_complete>
 True
@@ -107,7 +119,6 @@ Now, start the loop with the following question and initial searched results:
 </information>
 """
     return input_str
-
 
 
 if __name__ == '__main__':
@@ -146,7 +157,7 @@ if __name__ == '__main__':
                 example['question'] = example['question'].strip()
                 if example['question'][-1] != '?':
                     example['question'] += '?'
-                example['initial_searched_results'] = initial_searched_results[example['question']]['context_with_info']
+                example['initial_searched_results'] = initial_searched_results[example['question']]['context_with_info'].split("\nDoc 7")[0] + "\n"
                 
                 question = make_prefix(example, args.retriever)
                 solution = {

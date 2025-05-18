@@ -127,8 +127,12 @@ log/
 old
 data
 play.ipynb
+plot.ipynb
+
+plots
 
 verl_checkpoints
+nq_hotpotqa_
 
 *.gguf
 
@@ -137,3 +141,8 @@ results
 
 results_
 sft_model
+
+*.nfs*
+*.csv
+*.ipynb
+*.pdf

@@ -36,28 +36,27 @@ USE_GENERATION_SCORE = True
 
 
 def _select_rm_score_fn(data_source):
-    if data_source in ['nq', 'triviaqa', 'popqa', 'hotpotqa', '2wikimultihopqa', 'musique', 'bamboogle']:
+    # if data_source in ['nq', 'triviaqa', 'popqa', 'hotpotqa', '2wikimultihopqa', 'musique', 'bamboogle']:
         # return rag.compute_score_rag
         return rag_2.compute_score_rag
         # return ret.compute_score_rag
-    else:
-        raise NotImplementedError
+    # else:
+        # raise NotImplementedError
 
 
 class RewardManager():
     """The reward manager.
     """#data/Qwen_Qwen2.5-14B-Instruct-GPTQ-Int4/train/zeroshot_answers.json
 
-    def __init__(self, tokenizer, num_examine, format_score=0., zeroshot_cache_file="data/rag_cache/rag_cache.json", val_only=False) -> None:
+    def __init__(self, tokenizer, num_examine, format_score=0., zeroshot_cache_file="data/rag_cache/rag_cache.json", val_only=False, output_context_dir=None) -> None:
         self.tokenizer = tokenizer
         self.num_examine = num_examine  # the number of batches of decoded responses to print to the console
         self.format_score = format_score
         self.zeroshot_cache_file = zeroshot_cache_file
         self.zeroshot_lock = threading.Lock()
         self.val_only = val_only
-        
         # Add new cache directory for output sequences
-        self.output_sequences_dir = os.path.join("data", "output_sequences_v3")
+        self.output_sequences_dir = output_context_dir
         os.makedirs(self.output_sequences_dir, exist_ok=True)
         self.output_sequences_lock = threading.Lock()
         self.output_sequences_data = {}
@@ -283,10 +282,10 @@ def main_task(config):
         role_worker_mapping[Role.RewardModel] = ray.remote(RewardModelWorker)
         mapping[Role.RewardModel] = global_pool_id
 
-    reward_fn = RewardManager(tokenizer=tokenizer, num_examine=0)
+    reward_fn = RewardManager(tokenizer=tokenizer, num_examine=0, output_context_dir=config.output_context_dir)
 
     # Note that we always use function-based RM for validation
-    val_reward_fn = RewardManager(tokenizer=tokenizer, num_examine=1, val_only=True)
+    val_reward_fn = RewardManager(tokenizer=tokenizer, num_examine=1, val_only=True, output_context_dir=config.output_context_dir)
 
     resource_pool_manager = ResourcePoolManager(resource_pool_spec=resource_pool_spec, mapping=mapping)
     trainer = RayPPOTrainer(config=config,

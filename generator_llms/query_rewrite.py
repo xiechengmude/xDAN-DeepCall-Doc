@@ -2,6 +2,8 @@ import requests
 import json
 import argparse
 import re
+import os
+from generator_llms.claude_api import get_claude_response
 
 INSTRUCTION = """
 You are a query rewriting expert. Your task is to create query terms for user query to find relevant literature in a Wikipedia corpus using BM25.
@@ -57,6 +59,8 @@ def rewrite_query(query: str, rewriter_model: str, api_url: str = "http://localh
     """Send the query to the vLLM API and get the rewritten version."""
     messages = format_prompt(query)
     
+    if "claude" in rewriter_model.lower():
+        return get_claude_response(messages)
     
     if rewriter_model == "triviaqa":
         payload = {
@@ -67,8 +71,8 @@ def rewrite_query(query: str, rewriter_model: str, api_url: str = "http://localh
         }
     elif rewriter_model == "nq":
         payload = {
-            # "model": "DeepRetrieval/DeepRetrieval-NQ-BM25-3B",
-            "model": "/shared/rsaas/pj20/lmr_model/nq_serini_3b_continue/actor/global_step_1400",
+            "model": "DeepRetrieval/DeepRetrieval-NQ-BM25-3B",
+            # "model": "/shared/rsaas/pj20/lmr_model/nq_serini_3b_continue/actor/global_step_1400",
             "messages": messages,
             "temperature": 0.7,
             "max_tokens": 512

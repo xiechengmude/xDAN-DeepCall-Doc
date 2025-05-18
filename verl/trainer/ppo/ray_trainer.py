@@ -42,7 +42,7 @@ from verl.utils.seqlen_balancing import get_seqlen_balanced_partitions, log_seql
 import re
 # from search_c1.llm_agent.generation import LLMGenerationManager, GenerationConfig
 # from search_c1.llm_agent.generation_perp import LLMGenerationManager, GenerationConfig
-from search_c1.llm_agent.generation_ug import LLMGenerationManager, GenerationConfig
+from s3.llm_agent.generation_s3 import LLMGenerationManager, GenerationConfig
 
 from tqdm import tqdm
 
@@ -538,7 +538,8 @@ class RayPPOTrainer(object):
                                            batch_size=self.config.data.train_batch_size,
                                            shuffle=self.config.data.shuffle_train_dataloader,
                                            drop_last=True,
-                                           collate_fn=collate_fn)
+                                           collate_fn=collate_fn,
+                                           generator=torch.Generator().manual_seed(42))
 
         self.val_dataset = RLHFDataset(parquet_files=self.config.data.val_files,
                                        tokenizer=self.tokenizer,
@@ -600,6 +601,7 @@ class RayPPOTrainer(object):
             search_url = self.config.retriever.url,
             topk = self.config.retriever.topk,
             generator_llm = self.config.generator_llm,
+            output_context_dir = self.config.output_context_dir,
         )
 
         # Agent config preparation
@@ -850,6 +852,7 @@ class RayPPOTrainer(object):
             search_url = self.config.retriever.url,
             topk = self.config.retriever.topk,
             generator_llm = self.config.generator_llm,
+            output_context_dir = self.config.output_context_dir,
         )
 
         generation_manager = LLMGenerationManager(
