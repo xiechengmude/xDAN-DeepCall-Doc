@@ -149,7 +149,7 @@ if __name__ == '__main__':
     
     args = parser.parse_args()
 
-    data_sources = args.data_sources.split(',')
+    data_sources = args.data_sources.split(',')[:-1]
     all_dataset = []
 
     for data_source in data_sources:

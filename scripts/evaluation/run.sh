@@ -11,8 +11,8 @@
 #     --topk 12
 
 python scripts/evaluation/context.py \
-    --result_file results/haiku_s3_8_3_3_step_50.json \
-    --context_dir data/output_sequences_s3_8_3_3_step_50 \
+    --result_file results/haiku_s3_8_3_3_step_20.json \
+    --context_dir data/output_sequences_s3_8_3_3_step_20 \
     --num_workers 10 \
     --topk 20
 
