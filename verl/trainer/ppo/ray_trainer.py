@@ -591,7 +591,7 @@ class RayPPOTrainer(object):
         data_source_lst = []
 
         gen_config = GenerationConfig(
-            max_turns=self.config.max_turns,
+            max_turns=self.config.max_turns+1,
             max_start_length=self.config.data.max_start_length,
             max_prompt_length=self.config.data.max_prompt_length,
             max_response_length=self.config.data.max_response_length,
@@ -842,7 +842,7 @@ class RayPPOTrainer(object):
 
         # Agent config preparation
         gen_config = GenerationConfig(
-            max_turns=self.config.max_turns,
+            max_turns=self.config.max_turns+1,
             max_start_length=self.config.data.max_start_length,
             max_prompt_length=self.config.data.max_prompt_length,
             max_response_length=self.config.data.max_response_length,
@@ -901,7 +901,7 @@ class RayPPOTrainer(object):
                                     gen_batch=gen_batch,
                                     initial_input_ids=first_input_ids,
                                 )
-                                generation_manager._save_zeroshot_answers(gen_config.zero_shot_store_file)
+                                # generation_manager._save_zeroshot_answers(gen_config.zero_shot_store_file)
 
                             # final_gen_batch_output.batch.apply(lambda x: x.long(), inplace=True)
                             for key in final_gen_batch_output.batch.keys():
