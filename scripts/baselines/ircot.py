@@ -13,6 +13,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 import threading
 import re
 
+MODEL = "Qwen/Qwen2.5-7B-Instruct-GPTQ-Int4"
 
 def call_llm(prompt: str) -> str:
     """
@@ -25,7 +26,7 @@ def call_llm(prompt: str) -> str:
     messages = [
         {"role": "user", "content": prompt}
     ]
-    MODEL = "Qwen/Qwen2.5-14B-Instruct-GPTQ-Int4"
+
 
     payload = {
         "model": MODEL,
@@ -224,7 +225,7 @@ if __name__ == "__main__":
     parser.add_argument('--output_file', default="data/ircot/results.json", help="Path to save output JSON")
     parser.add_argument('--num_workers', type=int, default=8, help="Number of parallel workers")
     args = parser.parse_args()
-
+    
     os.makedirs(os.path.dirname(args.output_file), exist_ok=True)
 
     # Load input and previous results
