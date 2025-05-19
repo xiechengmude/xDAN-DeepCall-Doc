@@ -11,13 +11,13 @@
 
 ## Table of Contents
 
-- [📦 Installation](#-installation)
-- [💡 Preparation](#-preparation)
-- [🏋️ Run Training](#-run-training)
-- [🔍 Run Search/Retrieval](#-run-search-retrieval)
-    - [Baselines](#-baselines)
-    - [s3](#-s3)
-- [📈 Run Evaluation](#-run-evaluation)
+- [📦 Installation](#installation)
+- [💡 Preparation](#preparation)
+- [🏋️ Run Training](#run-training)
+- [🔍 Run Search/Retrieval](#run-searchretrieval)
+    - [Baselines](#baselines)
+    - [s3](#s3)
+- [📈 Run Evaluation](#run-evaluation)
 
 ## 📦 Installation
 
