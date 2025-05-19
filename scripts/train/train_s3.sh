@@ -1,5 +1,8 @@
 data_name=nq_hotpotqa_train
 
+# Set default random seed
+RANDOM_SEED=${1:-42}
+
 export CUDA_VISIBLE_DEVICES=1,2,3,4,5
 export DATA_DIR=data/${data_name} # first download the data from https://huggingface.co/datasets/PeterJinGo/nq_hotpotqa_train
 
@@ -7,7 +10,7 @@ WAND_PROJECT="SearchAgent"
 
 export BASE_MODEL='Qwen/Qwen2.5-7B-Instruct-1M'
 # export BASE_MODEL='Qwen/Qwen2.5-7B-Instruct'
-export EXPERIMENT_NAME="s3_8_3_3_new"
+export EXPERIMENT_NAME="s3_8_3_3_${RANDOM_SEED}"
 export VLLM_ATTENTION_BACKEND=XFORMERS
 
 PYTHONUNBUFFERED=1 python3 -m verl.trainer.main_ppo \
@@ -62,10 +65,10 @@ PYTHONUNBUFFERED=1 python3 -m verl.trainer.main_ppo \
     trainer.total_training_steps=100 \
     trainer.default_hdfs_dir=null \
     trainer.default_local_dir=verl_checkpoints/$EXPERIMENT_NAME \
-    data.random_seed=42 \
+    +data.random_seed=$RANDOM_SEED \
     max_turns=3 \
     +generator_llm="Qwen/Qwen2.5-14B-Instruct-GPTQ-Int4" \
     +output_context_dir="data/output_sequences_s3_8_3_3_new" \
     retriever.url="http://127.0.0.1:3000/retrieve" \
     retriever.topk=8 \
-    2>&1 | tee $EXPERIMENT_NAME.log
+    2>&1 | tee train_logs/$EXPERIMENT_NAME.log

@@ -4,7 +4,18 @@
 ***You Don't Need That Much Data to Train a Search Agent***
 
 <img src="images/performance_overview.png" alt="performance_overview" width="1000">
+
+**Performance Overview**
+
+<img src="images/framework.png" alt="framework" width="1000">
+
+**s3 Framework**
 </div>
+
+
+## What is s3?
+
+`s3` is a simple yet powerful framework for training search agents in retrieval-augmented generation (RAG). It teaches language models how to search more effectively—without changing the generator itself. By focusing solely on the search component, `s3` achieves strong performance across QA tasks with just a fraction of the data used by prior methods. It's modular, efficient, and designed to work seamlessly with any black-box LLM.
 
 
 ## Table of Contents

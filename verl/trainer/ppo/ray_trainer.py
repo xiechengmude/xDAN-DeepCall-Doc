@@ -491,6 +491,8 @@ class RayPPOTrainer(object):
         self.ray_worker_group_cls = ray_worker_group_cls
         self.use_generation_score = use_generation_score
         self.use_utility_score = use_utility_score
+        
+        print(f"========== Random Seed: {self.config.data.random_seed} ==========")
 
         # define KL control
         if self.use_reference_policy:
@@ -1019,6 +1021,11 @@ class RayPPOTrainer(object):
                     # collect metrics
                     metrics.update(compute_data_metrics(batch=batch, use_critic=self.use_critic))
                     metrics.update(compute_timing_metrics(batch=batch, timing_raw=timing_raw))
+
+                    # Check if this is the first step and if reward/utility_1_gen_1 meets threshold
+                    if self.global_steps == 1 and 'reward/utility_1_gen_1' in metrics and metrics['reward/utility_1_gen_1'] >= 0.2:
+                        print(f"Early stopping triggered: reward/utility_1_gen_1 = {metrics['reward/utility_1_gen_1']} >= 0.2")
+                        return
 
                     # TODO: make a canonical logger that supports various backend
                     logger.log(data=metrics, step=self.global_steps)

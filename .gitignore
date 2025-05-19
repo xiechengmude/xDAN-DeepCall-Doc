@@ -141,6 +141,8 @@ results
 
 results_
 sft_model
+check.sh
+evaluate_check.sh
 
 *.nfs*
 *.csv
