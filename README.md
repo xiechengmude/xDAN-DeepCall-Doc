@@ -18,7 +18,7 @@
 ## 📦 Installation
 
 **Searcher & Generator Environment**
-```
+```bash
 conda create -n s3 python=3.9
 # install torch [or you can skip this step and let vllm to install the correct version for you]
 pip install torch==2.4.0 --index-url https://download.pytorch.org/whl/cu121
@@ -41,7 +41,7 @@ pip install wandb IPython matplotlib huggingface_hub
 ```
 
 **Retriever Environment**
-```
+```bash
 conda create -n ret python=3.10
 conda activate ret
 
