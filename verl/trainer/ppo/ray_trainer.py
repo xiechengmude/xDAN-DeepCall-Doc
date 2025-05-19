@@ -531,7 +531,7 @@ class RayPPOTrainer(object):
             if self.config.data.train_data_num > len(self.train_dataset.dataframe):
                 print(f"[WARNING] training dataset size is smaller than desired size. Using the dataset as the original size {len(self.train_dataset.dataframe)}")
             else:
-                self.train_dataset.dataframe = self.train_dataset.dataframe.sample(self.config.data.train_data_num, random_state=42)
+                self.train_dataset.dataframe = self.train_dataset.dataframe.sample(self.config.data.train_data_num, random_state=self.config.data.random_seed)
         print(f"filtered training dataset size: {len(self.train_dataset.dataframe)}")
 
         self.train_dataloader = DataLoader(dataset=self.train_dataset,
@@ -539,7 +539,7 @@ class RayPPOTrainer(object):
                                            shuffle=self.config.data.shuffle_train_dataloader,
                                            drop_last=True,
                                            collate_fn=collate_fn,
-                                           generator=torch.Generator().manual_seed(42))
+                                           generator=torch.Generator().manual_seed(self.config.data.random_seed))
 
         self.val_dataset = RLHFDataset(parquet_files=self.config.data.val_files,
                                        tokenizer=self.tokenizer,
@@ -552,7 +552,7 @@ class RayPPOTrainer(object):
             if self.config.data.val_data_num > len(self.val_dataset.dataframe):
                 print(f"[WARNING] validation dataset size is smaller than desired size. Using the dataset as the original size {len(self.val_dataset.dataframe)}")
             else:
-                self.val_dataset.dataframe = self.val_dataset.dataframe.sample(self.config.data.val_data_num, random_state=42)
+                self.val_dataset.dataframe = self.val_dataset.dataframe.sample(self.config.data.val_data_num, random_state=self.config.data.random_seed)
         print(f"filtered validation dataset size: {len(self.val_dataset.dataframe)}")
 
         self.val_dataloader = DataLoader(dataset=self.val_dataset,

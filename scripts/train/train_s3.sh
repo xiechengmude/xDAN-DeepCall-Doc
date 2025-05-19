@@ -62,6 +62,7 @@ PYTHONUNBUFFERED=1 python3 -m verl.trainer.main_ppo \
     trainer.total_training_steps=100 \
     trainer.default_hdfs_dir=null \
     trainer.default_local_dir=verl_checkpoints/$EXPERIMENT_NAME \
+    data.random_seed=42 \
     max_turns=3 \
     +generator_llm="Qwen/Qwen2.5-14B-Instruct-GPTQ-Int4" \
     +output_context_dir="data/output_sequences_s3_8_3_3_new" \
