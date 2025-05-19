@@ -12,9 +12,9 @@
 ## Table of Contents
 
 - [📦 Installation](#-installation)
-- [💡 Preparation](#-data-preparation)
+- [💡 Preparation](#-preparation)
 - [🏋️ Run Training](#-run-training)
-- [🔍 Run Search / Retrieval](#-run-context-gathering)
+- [🔍 Run Search/Retrieval](#-run-search-retrieval)
     - [Baselines](#-baselines)
     - [s3](#-s3)
 - [📈 Run Evaluation](#-run-evaluation)
@@ -83,7 +83,7 @@ bash scripts/train/train_s3.sh
 ```
 
 
-## 🔍 Run Search / Retrieval
+## 🔍 Run Search/Retrieval
 ***This step is for the context gathering of s3 / baselines***
 
 **s3**
