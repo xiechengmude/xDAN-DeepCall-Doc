@@ -1,4 +1,4 @@
-export CUDA_VISIBLE_DEVICES=0,1,2,3,4,5
+export CUDA_VISIBLE_DEVICES=4,5,6,7
 file_path=/shared/eng/pj20/s3_medcorp
 index_file=$file_path/e5_Flat.index
 corpus_file=$file_path/medcorpus.jsonl

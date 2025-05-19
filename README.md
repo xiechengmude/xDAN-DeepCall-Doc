@@ -57,14 +57,46 @@ pip install uvicorn fastapi
 
 
 
+## 💡 Preparation
+***This step is for the precomputation of Naïve RAG Initialization***
 
-## 💡 Data Preparation
+```bash
+# deploy retriever
+bash scripts/deploy_retriever/retrieval_launch.sh # or scripts/deploy_retriever/retrieval_launch_mirage.sh for MedCorp corpus.
+# deploy generator
+bash generator_llms/host.sh # modify tensor-parallel-size to the number of GPUs you use
+# run precompute
+bash scripts/precompute.sh # this step will take a while, as it will precompute the naïve RAG Cache for training
+```
 
 
+## 🏋️ Run Training
+***This step is for the training of S3***
+
+```bash
+# deploy retriever
+bash scripts/deploy_retriever/retrieval_launch.sh 
+# deploy generator
+bash generator_llms/host.sh
+# run training
+bash scripts/train/train_s3.sh
+```
 
 
+## 🔍 Run Search / Retrieval
+***This step is for the context gathering of s3 / baselines***
 
-## Run Baselines (Context Gathering)
+**s3**
+```bash
+# deploy retriever
+bash scripts/deploy_retriever/retrieval_launch.sh 
+# run s3 inference
+bash scripts/s3_inference/evaluate-8-3-3.sh
+```
+
+<details>
+<summary>Baselines</summary>
+
 **RAG**
 ```bash
 bash scripts/deploy_retriever/retrieval_launch.sh # or retrieval_launch_bm25.sh # deploy retriever
@@ -89,3 +121,26 @@ bash scripts/baselines/search_r1.sh # run Search-R1
 bash retrieval_launch.sh # deploy e5 retriever
 python scripts/baselines/ircot.py
 ```
+
+**Search-o1**
+```bash
+bash retrieval_launch.sh # deploy e5 retriever
+bash scripts/baselines/search_o1.sh # run Search-o1
+```
+
+</details>
+
+
+## 📈 Run Evaluation
+***This step is for the evaluation of s3 / baselines***
+
+
+```bash
+bash scripts/evaluation/run.sh
+```
+
+
+Thanks for your interest in our work!
+
+
+
