@@ -3,21 +3,17 @@
 # s3 - Efficient Yet Effective Search Agent Training via RL
 ***You Don't Need That Much Data to Train a Search Agent***
 
-
+<img src="images/performance_overview.png" alt="performance_overview" width="700">
 </div>
-
-
 
 
 ## Table of Contents
 
-- [📦 Installation](#installation)
-- [💡 Preparation](#preparation)
-- [🏋️ Run Training](#run-training)
-- [🔍 Run Search/Retrieval](#run-searchretrieval)
-    - [Baselines](#baselines)
-    - [s3](#s3)
-- [📈 Run Evaluation](#run-evaluation)
+- [📦 Installation](#-installation)
+- [💡 Preparation](#-preparation)
+- [🏋️ Run Training](https://github.com/pat-jj/s3?tab=readme-ov-file#%EF%B8%8F-run-training)
+- [🔍 Run Search/Retrieval](https://github.com/pat-jj/s3?tab=readme-ov-file#-run-searchretrieval)
+- [📈 Run Evaluation](#-run-evaluation)
 
 ## 📦 Installation
 
