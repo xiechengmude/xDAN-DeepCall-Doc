@@ -3,7 +3,7 @@
 # s3 - Efficient Yet Effective Search Agent Training via RL
 ***You Don't Need That Much Data to Train a Search Agent***
 
-<img src="images/performance_overview.png" alt="performance_overview" width="1000">
+<img src="images/performance_overview.png" alt="performance_overview" width="800">
 
 **Performance Overview**
 </div>
@@ -12,7 +12,7 @@
 ## What is s3?
 
 <div align="center">
-<img src="images/framework.png" alt="framework" width="1000">
+<img src="images/framework.png" alt="framework" width="800">
 
 **s3 Framework**
 </div>
