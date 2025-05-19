@@ -136,6 +136,16 @@ bash scripts/evaluation/run.sh
 ```
 
 
+## Citation
+```bibtex
+@article{s3,
+  title={s3: You Don't Need That Much Data to Train a Search Agent via RL},
+  author={Pengcheng Jiang, Xueqiang Xu, Jiacheng Lin, Jinfeng Xiao, Zifeng Wang, Jimeng Sun, and Jiawei Han},
+  howpublished={\url{https://github.com/pat-jj/s3}},
+  year={2025}
+}
+```
+
 Thanks for your interest in our work!
 
 
