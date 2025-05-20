@@ -8,8 +8,8 @@ export DATA_DIR=data/${data_name} # first download the data from https://hugging
 
 WAND_PROJECT="SearchAgent"
 
-export BASE_MODEL='Qwen/Qwen2.5-7B-Instruct-1M'
-# export BASE_MODEL='Qwen/Qwen2.5-7B-Instruct'
+# export BASE_MODEL='Qwen/Qwen2.5-7B-Instruct-1M'
+export BASE_MODEL='Qwen/Qwen2.5-7B-Instruct'
 export EXPERIMENT_NAME="s3_8_3_3_${RANDOM_SEED}"
 export VLLM_ATTENTION_BACKEND=XFORMERS
 
@@ -33,7 +33,7 @@ PYTHONUNBUFFERED=1 python3 -m verl.trainer.main_ppo \
     actor_rollout_ref.actor.optim.lr_warmup_steps_ratio=0 \
     actor_rollout_ref.actor.ppo_mini_batch_size=30 \
     actor_rollout_ref.actor.ppo_micro_batch_size=15 \
-    actor_rollout_ref.rollout.temperature=0.6 \
+    actor_rollout_ref.rollout.temperature=0.4 \
     actor_rollout_ref.actor.fsdp_config.param_offload=true \
     actor_rollout_ref.rollout.log_prob_micro_batch_size=30 \
     actor_rollout_ref.rollout.tensor_model_parallel_size=1 \
@@ -57,12 +57,12 @@ PYTHONUNBUFFERED=1 python3 -m verl.trainer.main_ppo \
     trainer.default_hdfs_dir=null \
     trainer.n_gpus_per_node=5 \
     trainer.nnodes=1 \
-    trainer.save_freq=20 \
+    trainer.save_freq=50 \
     trainer.test_freq=1500 \
     trainer.project_name=$WAND_PROJECT \
     trainer.experiment_name=$EXPERIMENT_NAME \
     trainer.total_epochs=4 \
-    trainer.total_training_steps=100 \
+    trainer.total_training_steps=1500 \
     trainer.default_hdfs_dir=null \
     trainer.default_local_dir=verl_checkpoints/$EXPERIMENT_NAME \
     +data.random_seed=$RANDOM_SEED \

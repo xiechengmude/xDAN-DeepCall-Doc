@@ -1017,29 +1017,33 @@ class RayPPOTrainer(object):
                                 self.global_steps % self.config.trainer.save_freq == 0:
                             with _timer('save_checkpoint', timing_raw):
                                 self._save_checkpoint()
+                                
+                        elif self.global_steps == 20:
+                            with _timer('save_checkpoint', timing_raw):
+                                self._save_checkpoint()
 
                     # collect metrics
                     metrics.update(compute_data_metrics(batch=batch, use_critic=self.use_critic))
                     metrics.update(compute_timing_metrics(batch=batch, timing_raw=timing_raw))
 
                     # Check if this is the first step and if reward/utility_1_gen_1 meets threshold
-                    if self.global_steps == 1 and 'reward/utility_1_gen_1' in metrics and metrics['reward/utility_1_gen_1'] >= 0.2:
-                        print(f"Early stopping triggered: reward/utility_1_gen_1 = {metrics['reward/utility_1_gen_1']} >= 0.2")
-                        return
+                    # if self.global_steps == 1 and 'reward/utility_1_gen_1' in metrics and metrics['reward/utility_1_gen_1'] >= 0.2:
+                    #     print(f"Early stopping triggered: reward/utility_1_gen_1 = {metrics['reward/utility_1_gen_1']} >= 0.2")
+                    #     return
 
                     # TODO: make a canonical logger that supports various backend
                     logger.log(data=metrics, step=self.global_steps)
 
                     self.global_steps += 1
 
-                    if self.global_steps >= self.total_training_steps:
+                    # if self.global_steps >= self.total_training_steps:
 
-                        # perform validation after training
-                        if self.val_reward_fn is not None:
-                            val_metrics = self._validate()
-                            pprint(f'Final validation metrics: {val_metrics}')
-                            logger.log(data=val_metrics, step=self.global_steps)
-                        return
+                    #     # perform validation after training
+                    #     if self.val_reward_fn is not None:
+                    #         val_metrics = self._validate()
+                    #         pprint(f'Final validation metrics: {val_metrics}')
+                    #         logger.log(data=val_metrics, step=self.global_steps)
+                    #     return
                     
                 except Exception as e:
                     print(f'Error in training loop: {e}, step {self.global_steps}, skipping this batch')

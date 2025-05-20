@@ -37,7 +37,7 @@ PYTHONUNBUFFERED=1 python3 -m verl.trainer.main_ppo \
     actor_rollout_ref.actor.ppo_micro_batch_size=15 \
     actor_rollout_ref.rollout.temperature=0.6 \
     actor_rollout_ref.rollout.log_prob_micro_batch_size=30 \
-    actor_rollout_ref.rollout.tensor_model_parallel_size=2 \
+    actor_rollout_ref.rollout.tensor_model_parallel_size=1 \
     actor_rollout_ref.rollout.name=vllm \
     actor_rollout_ref.rollout.gpu_memory_utilization=0.6 \
     actor_rollout_ref.ref.log_prob_micro_batch_size=30 \
@@ -59,8 +59,9 @@ PYTHONUNBUFFERED=1 python3 -m verl.trainer.main_ppo \
     trainer.n_gpus_per_node=5 \
     trainer.nnodes=1 \
     max_turns=3 \
+    +data.random_seed=$RANDOM_SEED \
     +generator_llm="Qwen/Qwen2.5-14B-Instruct-GPTQ-Int4" \
-    +output_context_dir="data/output_sequences_s3_8_3_3_step_20" \
+    +output_context_dir=data/output_sequences_s3_8_3_3_step_20_${RANDOM_SEED} \
     retriever.url="http://127.0.0.1:3000/retrieve" \
     retriever.topk=8 \
-    2>&1 | tee evaluation_s3_8_3_3_step_20.log
+    2>&1 | tee evaluation_s3_8_3_3_step_20_${RANDOM_SEED}.log
