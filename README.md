@@ -1,19 +1,20 @@
 <div align="center">
 
 # s3 - Efficient Yet Effective Search Agent Training via RL
+***You Don't Need That Much Data to Train a Search Agent***
 
 <p align="center">
+
   <a href="https://arxiv.org/abs/2505.14146">
     <img src="https://img.shields.io/badge/arXiv-2505.14146-b31b1b.svg" alt="arXiv">
   </a>
 </p>
+</div>
 
-***You Don't Need That Much Data to Train a Search Agent***
+**Performance Overview:**
 
 <img src="images/performance_overview.png" alt="performance_overview" width="800">
 
-**Performance Overview**
-</div>
 
 
 ## What is s3?
