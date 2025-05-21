@@ -1,6 +1,7 @@
 data_name=nq_hotpotqa_train
 
 # Set default random seed
+# RANDOM_SEED=${1:-3948}
 RANDOM_SEED=${1:-42}
 
 export CUDA_VISIBLE_DEVICES=1,2,3,4,5
@@ -8,8 +9,8 @@ export DATA_DIR=data/${data_name} # first download the data from https://hugging
 
 WAND_PROJECT="SearchAgent"
 
-# export BASE_MODEL='Qwen/Qwen2.5-7B-Instruct-1M'
-export BASE_MODEL='Qwen/Qwen2.5-7B-Instruct'
+export BASE_MODEL='Qwen/Qwen2.5-7B-Instruct-1M'
+# export BASE_MODEL='Qwen/Qwen2.5-7B-Instruct'
 export EXPERIMENT_NAME="s3_8_3_3_${RANDOM_SEED}"
 export VLLM_ATTENTION_BACKEND=XFORMERS
 
@@ -33,7 +34,7 @@ PYTHONUNBUFFERED=1 python3 -m verl.trainer.main_ppo \
     actor_rollout_ref.actor.optim.lr_warmup_steps_ratio=0 \
     actor_rollout_ref.actor.ppo_mini_batch_size=30 \
     actor_rollout_ref.actor.ppo_micro_batch_size=15 \
-    actor_rollout_ref.rollout.temperature=0.4 \
+    actor_rollout_ref.rollout.temperature=0.6 \
     actor_rollout_ref.actor.fsdp_config.param_offload=true \
     actor_rollout_ref.rollout.log_prob_micro_batch_size=30 \
     actor_rollout_ref.rollout.tensor_model_parallel_size=1 \
