@@ -172,10 +172,10 @@ We would like to thank the following projects:
 
 ## Citation
 ```bibtex
-@article{s3,
+@article{jiang2025s3,
   title={s3: You Don't Need That Much Data to Train a Search Agent via RL},
-  author={Pengcheng Jiang, Xueqiang Xu, Jiacheng Lin, Jinfeng Xiao, Zifeng Wang, Jimeng Sun, and Jiawei Han},
-  howpublished={\url{https://github.com/pat-jj/s3}},
+  author={Jiang, Pengcheng and Xu, Xueqiang and Lin, Jiacheng and Xiao, Jinfeng and Wang, Zifeng and Sun, Jimeng and Han, Jiawei},
+  journal={arXiv preprint arXiv:2505.14146},
   year={2025}
 }
 ```
