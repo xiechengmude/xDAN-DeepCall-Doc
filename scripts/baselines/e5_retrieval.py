@@ -50,8 +50,10 @@ def main():
 
     df = pd.read_parquet(args.input_parquet)
 
-    # data_sources = ['nq', 'triviaqa', 'popqa', 'hotpotqa', '2wikimultihopqa', 'musique', 'bamboogle']
-    data_sources = ['medqa', 'medmcqa', 'pubmedqa', 'bioasq', 'mmlu']
+    data_sources = ['nq', 'triviaqa', 'popqa', 'hotpotqa', '2wikimultihopqa', 'musique', 'bamboogle']
+    
+    # change to the following for medcorp
+    # data_sources = ['medqa', 'medmcqa', 'pubmedqa', 'bioasq', 'mmlu']
 
     for data_source in data_sources:
         print(f"[INFO] Processing: {data_source}")
@@ -65,7 +67,9 @@ def main():
             golden_answers = row['reward_model']['ground_truth']['target'].tolist()
             if 'mirage' in args.input_parquet:
                 q_ = q.split('\nOptions:')[0]
-                # print(q)
+            else:
+                q_ = q
+                
             retrieval_result = search(q_, args.endpoint, args.input_parquet)
             question_info = {
                 'golden_answers': golden_answers,
