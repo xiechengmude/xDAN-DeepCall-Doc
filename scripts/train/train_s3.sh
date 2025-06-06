@@ -15,8 +15,8 @@ export EXPERIMENT_NAME="s3_8_3_3_${RANDOM_SEED}"
 export VLLM_ATTENTION_BACKEND=XFORMERS
 
 PYTHONUNBUFFERED=1 python3 -m verl.trainer.main_ppo \
-    data.train_files=$DATA_DIR/train_e5_u1.parquet \
-    data.val_files=$DATA_DIR/test_e5_u1.parquet \
+    data.train_files=$DATA_DIR/train_e5_s3.parquet \
+    data.val_files=$DATA_DIR/test_e5_s3.parquet \
     data.train_data_num=null \
     data.val_data_num=null \
     data.train_batch_size=120 \
