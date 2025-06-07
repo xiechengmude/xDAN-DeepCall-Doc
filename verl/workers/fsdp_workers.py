@@ -398,6 +398,37 @@ class ActorRolloutRefWorker(Worker):
         return output
 
     @register(dispatch_mode=Dispatch.DP_COMPUTE_PROTO)
+    def compute_log_prob(self, data: DataProto) -> DataProto:
+        """mostly copying from generate_sequences"""
+        data = data.to('cuda')
+
+        assert self._is_rollout
+        if self._is_offload_param:
+            load_fsdp_param_and_grad(module=self.actor_module_fsdp,
+                                     device_id=torch.cuda.current_device(),
+                                     load_grad=self._is_offload_grad)
+
+        data.batch = data.batch.cuda()
+        meta_info = {'eos_token_id': self.tokenizer.eos_token_id, 'pad_token_id': self.tokenizer.pad_token_id}
+        data.meta_info.update(meta_info)
+
+        with self.ulysses_sharding_manager:
+            data = self.ulysses_sharding_manager.preprocess_data(data)
+            old_log_probs = self.actor.compute_log_prob(data=data)
+            output = DataProto.from_dict(tensors={'old_log_probs': old_log_probs})
+            output = self.ulysses_sharding_manager.postprocess_data(output)
+            
+        output = output.to('cpu')
+
+        if self._is_offload_param:
+            # NOTE(sgm): the grad is already in CPU, only offload param here
+            offload_fsdp_param_and_grad(module=self.actor_module_fsdp, offload_grad=self._is_offload_grad)
+        # clear kv cache
+        torch.cuda.empty_cache()
+        log_gpu_memory_usage('After recompute log prob', logger=logger)
+        return output
+        
+    @register(dispatch_mode=Dispatch.DP_COMPUTE_PROTO)
     def generate_sequences(self, prompts: DataProto):
         prompts = prompts.to('cuda')
         # set to False if it is validation

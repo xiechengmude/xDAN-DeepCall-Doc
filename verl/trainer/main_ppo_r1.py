@@ -20,8 +20,8 @@ import torch
 # from verl.utils.reward_score import rag, ppl, rag_new
 # from verl.utils.reward_score import rag_new
 from verl.utils.reward_score import rag_2
-# from verl.utils.reward_score import ret
-from verl.trainer.ppo.ray_trainer import RayPPOTrainer
+
+from verl.trainer.ppo.ray_trainer_r1 import RayPPOTrainer
 import re
 import os
 import json
@@ -29,40 +29,36 @@ import numpy as np
 import threading
 import random
 
-from verl.utils.reward_score.rag_2 import output_sequence
-
-USE_UTILITY_SCORE = True
-USE_GENERATION_SCORE = True
+from verl.utils.reward_score.extract import output_sequence
 
 
 def _select_rm_score_fn(data_source):
     # if data_source in ['nq', 'triviaqa', 'popqa', 'hotpotqa', '2wikimultihopqa', 'musique', 'bamboogle']:
         # return rag.compute_score_rag
         return rag_2.compute_score_rag
-        # return ret.compute_score_rag
     # else:
-        # raise NotImplementedError
+    #     raise NotImplementedError
 
 
 class RewardManager():
     """The reward manager.
-    """#data/Qwen_Qwen2.5-14B-Instruct-GPTQ-Int4/train/zeroshot_answers.json
+    """
 
-    def __init__(self, tokenizer, num_examine, format_score=0., zeroshot_cache_file="data/rag_cache/rag_cache.json", val_only=False, output_context_dir=None) -> None:
+    def __init__(self, tokenizer, num_examine, format_score=0., zeroshot_cache_file="data/Qwen_Qwen2.5-7B-Instruct-GPTQ-Int4/zeroshot_answers_.json", val_only=False) -> None:
         self.tokenizer = tokenizer
         self.num_examine = num_examine  # the number of batches of decoded responses to print to the console
         self.format_score = format_score
         self.zeroshot_cache_file = zeroshot_cache_file
         self.zeroshot_lock = threading.Lock()
         self.val_only = val_only
+        
         # Add new cache directory for output sequences
-        self.output_sequences_dir = output_context_dir
+        self.output_sequences_dir = os.path.join("data", "output_sequences_r1_7b_mirage_medcorp")
         os.makedirs(self.output_sequences_dir, exist_ok=True)
         self.output_sequences_lock = threading.Lock()
         self.output_sequences_data = {}
         
         if os.path.exists(self.zeroshot_cache_file):
-            print(f"load zeroshot answers from {self.zeroshot_cache_file}")
             self.zeroshot_answers = json.load(open(self.zeroshot_cache_file))
         else:
             os.makedirs(os.path.dirname(self.zeroshot_cache_file), exist_ok=True)
@@ -82,12 +78,7 @@ class RewardManager():
         """Save all output sequences for all data sources"""
         with self.output_sequences_lock:
             for data_source in self.output_sequences_data:
-                if data_source not in self.output_sequences_data:
-                    continue
-                    
-                cache_file = os.path.join(self.output_sequences_dir, f"{data_source}_output_sequences.json")
-                with open(cache_file, 'w') as f:
-                    json.dump(self.output_sequences_data[data_source], f, indent=2)
+                self._save_output_sequences(data_source)
 
     def __call__(self, data: DataProto):
         """We will expand this function gradually based on the available datasets"""
@@ -128,36 +119,33 @@ class RewardManager():
                     solution_str=sequences_str, 
                     ground_truth=ground_truth, 
                     zeroshot_answers=self.zeroshot_answers,
-                    data_source=data_source,
-                    use_utility_score=USE_UTILITY_SCORE,
-                    use_generation_score=USE_GENERATION_SCORE
-                    # val_only=self.val_only
+                    val_only=self.val_only
                 )
                 
                 # Safely update zeroshot answers if needed
-                # question = ground_truth['question']
-                # if question not in self.zeroshot_answers:
-                #     with self.zeroshot_lock:
-                #         # Double check after acquiring lock
-                #         if question not in self.zeroshot_answers:
-                #             self.zeroshot_answers[question] = {
-                #                 'answer': answer_zeroshot,
-                #                 'score': answer_zeroshot_score
-                #             }
-                #             # Save to file periodically
-                #             if random.random() < 0.01:  # Save 1% of the time
-                #                 with open(self.zeroshot_cache_file, 'w') as f:
-                #                     json.dump(self.zeroshot_answers, f)
+                question = ground_truth['question']
+                if question not in self.zeroshot_answers:
+                    with self.zeroshot_lock:
+                        # Double check after acquiring lock
+                        if question not in self.zeroshot_answers:
+                            self.zeroshot_answers[question] = {
+                                'answer': answer_zeroshot,
+                                'score': answer_zeroshot_score
+                            }
+                            # Save to file periodically
+                            if random.random() < 0.01:  # Save 1% of the time
+                                with open(self.zeroshot_cache_file, 'w') as f:
+                                    json.dump(self.zeroshot_answers, f)
                                     
-                #         elif self.zeroshot_answers[question]['score'] != answer_zeroshot_score:
-                #             self.zeroshot_answers[question] = {
-                #                 'answer': answer_zeroshot,
-                #                 'score': answer_zeroshot_score
-                #             }
-                #             # Save to file periodically
-                #             if random.random() < 0.01:  # Save 1% of the time
-                #                 with open(self.zeroshot_cache_file, 'w') as f:
-                #                     json.dump(self.zeroshot_answers, f)
+                        elif self.zeroshot_answers[question]['score'] != answer_zeroshot_score:
+                            self.zeroshot_answers[question] = {
+                                'answer': answer_zeroshot,
+                                'score': answer_zeroshot_score
+                            }
+                            # Save to file periodically
+                            if random.random() < 0.01:  # Save 1% of the time
+                                with open(self.zeroshot_cache_file, 'w') as f:
+                                    json.dump(self.zeroshot_answers, f)
             else:
                 print(f"start output sequence")
                 question, golden_answers, context_with_info, response_str = output_sequence(solution_str=sequences_str, ground_truth=ground_truth)
@@ -176,7 +164,7 @@ class RewardManager():
                     }
                     
                     # Periodically save to file (1% chance)
-                    if random.random() < 0.01:
+                    if random.random() < 0.03:
                         # Save to a temporary file first
                         temp_file = os.path.join(self.output_sequences_dir, f"{data_source}_output_sequences.json.tmp")
                         with open(temp_file, 'w') as f:
@@ -248,7 +236,7 @@ def main_task(config):
     else:
         raise NotImplementedError
 
-    from verl.trainer.ppo.ray_trainer import ResourcePoolManager, Role
+    from verl.trainer.ppo.ray_trainer_r1 import ResourcePoolManager, Role
 
     role_worker_mapping = {
         Role.ActorRollout: ray.remote(ActorRolloutRefWorker),
@@ -282,10 +270,10 @@ def main_task(config):
         role_worker_mapping[Role.RewardModel] = ray.remote(RewardModelWorker)
         mapping[Role.RewardModel] = global_pool_id
 
-    reward_fn = RewardManager(tokenizer=tokenizer, num_examine=0, output_context_dir=config.output_context_dir)
+    reward_fn = RewardManager(tokenizer=tokenizer, num_examine=0)
 
     # Note that we always use function-based RM for validation
-    val_reward_fn = RewardManager(tokenizer=tokenizer, num_examine=1, val_only=True, output_context_dir=config.output_context_dir)
+    val_reward_fn = RewardManager(tokenizer=tokenizer, num_examine=1, val_only=True)
 
     resource_pool_manager = ResourcePoolManager(resource_pool_spec=resource_pool_spec, mapping=mapping)
     trainer = RayPPOTrainer(config=config,
@@ -295,8 +283,6 @@ def main_task(config):
                             ray_worker_group_cls=ray_worker_group_cls,
                             reward_fn=reward_fn,
                             val_reward_fn=val_reward_fn,
-                            use_generation_score=USE_GENERATION_SCORE,
-                            use_utility_score=USE_UTILITY_SCORE
                             )
     trainer.init_workers()
     trainer.fit()

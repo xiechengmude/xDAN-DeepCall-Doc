@@ -340,6 +340,14 @@ class ActorRolloutRefWorker(MegatronWorker):
         output = output.to('cpu')
         torch.cuda.empty_cache()
         return output
+    
+    # @register(dispatch_mode=Dispatch.MEGATRON_PP_AS_DP_PROTO)
+    # def compute_log_prob(self, data: DataProto) -> DataProto:
+    #     assert self._is_rollout
+    #     output = self.actor.compute_log_prob(data=data)
+    #     output = DataProto.from_dict(tensors={'old_log_probs': output})
+    #     torch.cuda.empty_cache()
+    #     return output
 
     @register(dispatch_mode=Dispatch.MEGATRON_PP_AS_DP_PROTO)
     def generate_sequences(self, prompts: DataProto):

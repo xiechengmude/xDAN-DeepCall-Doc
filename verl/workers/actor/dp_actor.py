@@ -209,6 +209,8 @@ class DataParallelPPOActor(BasePPOActor):
         temperature = data.meta_info['temperature']  # temperature must be in the data.meta_info to avoid slient error
 
         select_keys = ['responses', 'input_ids', 'attention_mask', 'position_ids', 'old_log_probs', 'advantages']
+        if self.config.state_masking:
+            select_keys.append('loss_mask')
         if self.config.use_kl_loss:
             select_keys.append('ref_log_prob')
         batch = data.select(batch_keys=select_keys).batch
@@ -236,6 +238,8 @@ class DataParallelPPOActor(BasePPOActor):
                 response_length = responses.size(1)
                 attention_mask = data['attention_mask']
                 response_mask = attention_mask[:, -response_length:]
+                if self.config.state_masking:
+                    response_mask = data['loss_mask']
                 old_log_prob = data['old_log_probs']
                 advantages = data['advantages']
 
@@ -264,7 +268,7 @@ class DataParallelPPOActor(BasePPOActor):
                                                 kl_penalty=self.config.kl_loss_type)
                     kl_loss = masked_mean(kld, response_mask)
 
-                    policy_loss = policy_loss - kl_loss * self.config.kl_loss_coef
+                    policy_loss = policy_loss + kl_loss * self.config.kl_loss_coef
                     metrics['actor/kl_loss'] = kl_loss.detach().item()
                     metrics['actor/kl_coef'] = self.config.kl_loss_coef
 

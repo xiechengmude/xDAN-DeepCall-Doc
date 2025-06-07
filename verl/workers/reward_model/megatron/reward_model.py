@@ -82,6 +82,9 @@ class MegatronRewardModel(BasePPORewardModel):
             # workaround
             decode_with_rm_chat = decode_result.replace("<|user|>\n", "[INST] ").replace(
                 "</s>\n<|assistant|>\n", " [/INST]").replace("</s> \n<|assistant|>\n", " [/INST]") + "</s>"
+
+            print(f"decode_with_rm_chat: {decode_with_rm_chat}")
+            
             if print_decode and torch.distributed.get_rank() == 0:
                 # only print first decode result
                 print(f'device {torch.cuda.current_device()}: sft decode result:\n{decode_result}\n \

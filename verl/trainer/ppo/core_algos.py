@@ -53,7 +53,7 @@ class FixedKLController:
         pass
 
 
-def get_kl_controller(config):
+def get_kl_controller(config): # seems never used?
     if config.critic.kl_ctrl.type == 'fixed':
         kl_ctrl = FixedKLController(kl_coef=config.critic.kl_ctrl.kl_coef)
     elif config.critic.kl_ctrl.type == 'adaptive':
