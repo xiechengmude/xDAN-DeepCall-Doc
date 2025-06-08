@@ -2,20 +2,20 @@ import json
 import boto3
 import time
 
-with open('generator_llms/aws_access.key', 'r') as f:
-    AWS_ACCESS_KEY_ID = f.read().strip()
-
-with open('generator_llms/claude_api_aws.key', 'r') as f:
-    AWS_SECRET_ACCESS_KEY = f.read().strip()
-
-AWS_DEFAULT_REGION = "us-west-2"
-
-
-boto3_client = boto3.client("bedrock-runtime",
-    region_name=AWS_DEFAULT_REGION, 
-    aws_access_key_id=AWS_ACCESS_KEY_ID, 
-    aws_secret_access_key=AWS_SECRET_ACCESS_KEY
-)
+#with open('generator_llms/aws_access.key', 'r') as f:
+#    AWS_ACCESS_KEY_ID = f.read().strip()
+#
+#with open('generator_llms/claude_api_aws.key', 'r') as f:
+#    AWS_SECRET_ACCESS_KEY = f.read().strip()
+#
+#AWS_DEFAULT_REGION = "us-west-2"
+#
+#
+#boto3_client = boto3.client("bedrock-runtime",
+#    region_name=AWS_DEFAULT_REGION, 
+#    aws_access_key_id=AWS_ACCESS_KEY_ID, 
+#    aws_secret_access_key=AWS_SECRET_ACCESS_KEY
+#)
 
 
 # model="claude-3-haiku-20240307"

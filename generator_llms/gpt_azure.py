@@ -1,14 +1,14 @@
 import os
 from openai import OpenAI
 import pdb
-with open('generator_llms/openai_api_azure.key', 'r') as f:
-    api_key = f.read().strip()
+#with open('generator_llms/openai_api_azure.key', 'r') as f:
+#    api_key = f.read().strip()
     
     
-os.environ["OPENAI_API_TYPE"] = "azure"
-os.environ["AZURE_OPENAI_ENDPOINT"] = "https://zifeng-gpt-2.openai.azure.com/"
-os.environ["AZURE_OPENAI_API_KEY"] = api_key
-os.environ["OPENAI_API_VERSION"] = "2023-03-15-preview"
+#os.environ["OPENAI_API_TYPE"] = "azure"
+#os.environ["AZURE_OPENAI_ENDPOINT"] = "https://zifeng-gpt-2.openai.azure.com/"
+#os.environ["AZURE_OPENAI_API_KEY"] = api_key
+#os.environ["OPENAI_API_VERSION"] = "2023-03-15-preview"
 
 from langchain_openai import AzureChatOpenAI
 from langchain_community.callbacks import get_openai_callback

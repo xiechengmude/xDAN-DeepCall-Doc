@@ -1,5 +1,5 @@
-export CUDA_VISIBLE_DEVICES=0,1,3,4
-file_path=/shared/eng/pj20/search_c1_data
+export CUDA_VISIBLE_DEVICES=0,1
+file_path=/data/vayu/train/s3/data
 index_file=$file_path/e5_Flat.index
 corpus_file=$file_path/wiki-18.jsonl
 retriever_name=e5
