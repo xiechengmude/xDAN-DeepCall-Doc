@@ -1,3 +1,5 @@
+mkdir -p data/rag_cache
+
 python scripts/evaluation/context.py \
     --result_file data/rag_cache/rag_cache.json \
     --context_dir data/RAG_Retrieval/train \
